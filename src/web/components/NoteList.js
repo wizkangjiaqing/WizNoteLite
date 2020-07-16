@@ -315,6 +315,21 @@ class NoteList extends React.Component {
       }
     },
 
+    handleOpenPublishWindow: async () => {
+      const note = this.contextMenuNote;
+      this.contextMenuNote = note;
+      this.handler.handleCloseContextMenu();
+      if (!note) {
+        return;
+      }
+      //
+      try {
+        await window.wizApi.userManager.openPublishWindow(this.props.kbGuid, note.guid, note);
+      } catch (err) {
+        alert(err.message);
+      }
+    },
+
     handlePutBackNote: async () => {
       const note = this.contextMenuNote;
       this.contextMenuNote = note;
@@ -735,6 +750,7 @@ class NoteList extends React.Component {
           }
         >
           <MenuItem onClick={this.handler.handleDeleteNote}><FormattedMessage id="menuDelete" /></MenuItem>
+          {!isTrash && <MenuItem onClick={this.handler.handleOpenPublishWindow}><FormattedMessage id="menuPublish" /></MenuItem>}
           {isTrash && <MenuItem onClick={this.handler.handlePutBackNote}><FormattedMessage id="menuPushBack" /></MenuItem>}
         </Menu>
       </div>

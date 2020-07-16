@@ -169,6 +169,26 @@ class UserManager extends EventEmitter {
     return result;
   }
 
+  async openPublishWindow(kbGuid, noteGuid) {
+    const result = await invokeApi('openPublishWindow', this.userGuid, kbGuid, noteGuid);
+    return result;
+  }
+
+  async publishSetCookie(platformId) {
+    const result = await invokeApi('publishSetCookie', platformId);
+    return result;
+  }
+
+  async publishNote(userGuid, kbGuid, noteGuid, platformIds) {
+    const result = await invokeApi('publishNote', userGuid, kbGuid, noteGuid, platformIds);
+    return result;
+  }
+
+  async publishGetWebPlatforms(userGuid, kbGuid, noteGuid) {
+    const result = await invokeApi('publishGetWebPlatforms', userGuid, kbGuid, noteGuid);
+    return result;
+  }
+
   async putBackNote(kbGuid, noteGuid) {
     const result = await invokeApi('putBackNote', this.userGuid, kbGuid, noteGuid);
     return result;

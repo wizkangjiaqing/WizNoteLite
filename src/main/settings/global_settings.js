@@ -15,6 +15,10 @@ function getSettings(key, defaultValue) {
   return value;
 }
 
+function deleteSettings(key) {
+  store.delete(key);
+}
+
 function setLastAccount(userGuid) {
   store.set('lastAccount', userGuid);
 }
@@ -26,6 +30,7 @@ function getLastAccount() {
 module.exports = {
   setSettings,
   getSettings,
+  deleteSettings,
   setLastAccount,
   getLastAccount,
 };

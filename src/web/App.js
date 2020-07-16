@@ -9,9 +9,11 @@ import 'moment/locale/zh-cn';
 import 'moment/locale/zh-tw';
 import 'moment/locale/zh-hk';
 import 'moment/locale/zh-mo';
+import queryString from 'query-string';
 
 import Login from './pages/Login';
 import Main from './pages/Main';
+import Publish from './pages/Publish';
 import AboutDialog from './components/AboutDialog';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import localeMessages from './locale';
@@ -29,6 +31,8 @@ const styles = (/* theme */) => ({
   },
 });
 
+const page = queryString.parse(window.location.search).page || 'main';
+const noteGuid = queryString.parse(window.location.search).noteGuid || null;
 const locale = getLocale();
 const langMap = {
   en: 'en',
@@ -133,7 +137,7 @@ class App extends React.Component {
                 mergeLocalAccount={mergeLocalAccount}
               />
             )}
-            {loggedIn && !isAutoLogging && (
+            {loggedIn && !isAutoLogging && page === 'main' && (
               <Main
                 kbGuid={kbGuid}
                 user={currentUser}
@@ -141,6 +145,13 @@ class App extends React.Component {
                 mergeLocalAccount={mergeLocalAccount}
                 onCreateAccount={this.handler.handleCreateAccount}
                 onInvalidPassword={this.handler.handleInvalidPassword}
+              />
+            )}
+            {loggedIn && !isAutoLogging && page === 'publish' && (
+              <Publish
+                kbGuid={kbGuid}
+                user={currentUser}
+                noteGuid={noteGuid}
               />
             )}
           </div>

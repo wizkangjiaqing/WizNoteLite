@@ -2,6 +2,7 @@ const {
   app, BrowserWindow, nativeTheme,
   shell, Menu,
 } = require('electron');
+const pie = require('puppeteer-in-electron');
 const path = require('path');
 const url = require('url');
 const windowStateKeeper = require('electron-window-state');
@@ -11,8 +12,11 @@ const { registerWizProtocol } = require('./main/db/resource_loader');
 
 const { i18nInit, getCurrentLang } = require('./main/i18n');
 const { getMainMenuTemplate, getMacDockMenuTemplate } = require('./main/settings/menu_options');
+require('./main/publish');
 
 const isMac = process.platform === 'darwin';
+
+pie.initialize(app);
 
 app.on('ready', async () => {
   await i18nInit();
@@ -60,8 +64,6 @@ function createWindow() {
   } else {
     options.frame = process.env.SHOW_TITLE_BAR === '1';
   }
-  //
-  //
   //
   mainWindow = new BrowserWindow(options);
   mainWindow.isMainWindow = true;

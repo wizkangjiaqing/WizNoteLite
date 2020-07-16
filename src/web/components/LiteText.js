@@ -30,7 +30,7 @@ function LiteText(props) {
   const {
     highlightText, children, className, inheritColor,
     isDivContainer, title, style, fullWidth,
-    disableUserSelect,
+    disableUserSelect, onClick,
   } = props;
 
   const headlineMapping = {
@@ -68,6 +68,7 @@ function LiteText(props) {
         disableUserSelect && classes.userSelectNone,
         inheritColor && classes.inheritColor,
         className)}
+      onClick={onClick}
     >
       {childrenNodes}
     </Typography>
@@ -87,6 +88,7 @@ LiteText.propTypes = {
   style: PropTypes.object,
   fullWidth: PropTypes.bool,
   disableUserSelect: PropTypes.bool,
+  onClick: PropTypes.func,
 };
 
 LiteText.defaultProps = {
@@ -99,6 +101,7 @@ LiteText.defaultProps = {
   style: null,
   fullWidth: true,
   disableUserSelect: false,
+  onClick: null,
 };
 
 export default React.memo(LiteText);

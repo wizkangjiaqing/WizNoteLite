@@ -30,10 +30,31 @@ function getNoteResources(userGuid, kbGuid, noteGuid) {
   return p;
 }
 
+function getPublish(userGuid) {
+  const p = path.join(getUserData(userGuid), 'publish');
+  fs.ensureDirSync(p);
+  return p;
+}
+
+function getPublishNoteTasksFile(userGuid, kbGuid, noteGuid) {
+  const p = path.join(getPublish(userGuid), 'tasks');
+  fs.ensureDirSync(p);
+  return path.join(p, noteGuid);
+}
+
+function getPublishTempFile(userGuid, randomName) {
+  const p = path.join(getPublish(userGuid), 'temp');
+  fs.ensureDirSync(p);
+  return path.join(p, randomName);
+}
+
 module.exports = {
   getAppData,
   getUsersData,
   getUserData,
   getNoteData,
   getNoteResources,
+  getPublish,
+  getPublishNoteTasksFile,
+  getPublishTempFile,
 };

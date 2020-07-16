@@ -35,6 +35,7 @@ export default {
   //
   trash: '回收站',
   menuDelete: '删除',
+  menuPublish: '发布',
   menuPushBack: '放回原处',
   // 编辑器
   editorMenuLabel: '添加',

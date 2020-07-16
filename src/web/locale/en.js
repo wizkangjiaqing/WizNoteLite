@@ -35,6 +35,7 @@ export default {
   //
   trash: 'Trash',
   menuDelete: 'Delete',
+  menuPublish: 'Publish',
   menuPushBack: 'Push Back',
   // 编辑器
   editorMenuLabel: 'Insert',
