@@ -315,7 +315,7 @@ class NoteList extends React.Component {
       }
     },
 
-    handleOpenPublishWindow: async () => {
+    openPlatformWindow: async () => {
       const note = this.contextMenuNote;
       this.contextMenuNote = note;
       this.handler.handleCloseContextMenu();
@@ -324,7 +324,7 @@ class NoteList extends React.Component {
       }
       //
       try {
-        await window.wizApi.userManager.openPublishWindow(this.props.kbGuid, note.guid, note);
+        await window.wizApi.userManager.openPlatformWindow(this.props.kbGuid, note.guid, note);
       } catch (err) {
         alert(err.message);
       }
@@ -750,7 +750,7 @@ class NoteList extends React.Component {
           }
         >
           <MenuItem onClick={this.handler.handleDeleteNote}><FormattedMessage id="menuDelete" /></MenuItem>
-          {!isTrash && <MenuItem onClick={this.handler.handleOpenPublishWindow}><FormattedMessage id="menuPublish" /></MenuItem>}
+          {!isTrash && <MenuItem onClick={this.handler.openPlatformWindow}><FormattedMessage id="menuPublish" /></MenuItem>}
           {isTrash && <MenuItem onClick={this.handler.handlePutBackNote}><FormattedMessage id="menuPushBack" /></MenuItem>}
         </Menu>
       </div>

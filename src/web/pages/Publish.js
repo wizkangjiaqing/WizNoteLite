@@ -31,6 +31,12 @@ const style = (theme) => ({
 
 class Publish extends React.Component {
   handler = {
+    initWebPlatforms: async () => {
+      window.wizApi.userManager.on('publishPlatformChange', this.handler.handlePlatformChange);
+      const { user: { userGuid }, kbGuid, noteGuid } = this.props;
+      const platforms = await this.handler.publishGetWebPlatforms(userGuid, kbGuid, noteGuid);
+      this.setState({ platforms });
+    },
     setCookie: async ({ id: platformId }) => {
       await window.wizApi.userManager.publishSetCookie(platformId);
     },
@@ -70,9 +76,12 @@ class Publish extends React.Component {
   }
 
   async componentDidMount() {
-    const { user: { userGuid }, kbGuid, noteGuid } = this.props;
-    const platforms = await this.handler.publishGetWebPlatforms(userGuid, kbGuid, noteGuid);
-    this.setState({ platforms });
+    window.wizApi.userManager.on('publishPlatformChange', this.handler.initWebPlatforms);
+    await this.handler.initWebPlatforms();
+  }
+
+  componentWillUnmount() {
+    window.wizApi.userManager.off('publishPlatformChange', this.handler.initWebPlatforms);
   }
 
   render() {

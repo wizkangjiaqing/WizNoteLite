@@ -2,6 +2,7 @@ const { BrowserWindow, app } = require('electron');
 const pie = require('puppeteer-in-electron');
 const puppeteer = require('puppeteer-core');
 const { publishPlatform: { getPlatforms }, publishCookie: { setPlatformCookie } } = require('../data');
+const { platformWindows } = require('./window_helper');
 
 async function openSetCookieWindow(event, platformId) {
   const platforms = await getPlatforms();
@@ -21,6 +22,7 @@ async function openSetCookieWindow(event, platformId) {
       && domain === platform.cookies.domain
       && value);
     await setPlatformCookie(platformId, exists);
+    platformWindows.onPlatformChange();
   });
 }
 

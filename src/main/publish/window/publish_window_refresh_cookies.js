@@ -2,7 +2,7 @@ const { BrowserWindow, app } = require('electron');
 const pie = require('puppeteer-in-electron');
 const puppeteer = require('puppeteer-core');
 const { publishPlatform: { getPlatforms }, publishCookie: { setPlatformCookie } } = require('../data');
-
+const { platformWindows } = require('./window_helper');
 /**
  * loadURL has performance issue sometimes
  */
@@ -22,6 +22,7 @@ async function openRefreshCookieWindow() {
       && name === platform.cookies.name
       && domain === platform.cookies.domain);
     await setPlatformCookie(platform.id, exists);
+    await platformWindows.onPlatformChange();
   }
   window.destroy();
 }

@@ -1,6 +1,6 @@
 const { ipcMain } = require('electron');
 const {
-  openHomeWindow, openPublishWindow, openSetCookieWindow, openRefreshCookieWindow,
+  openPlatformWindow, openPublishWindow, openSetCookieWindow, openRefreshCookieWindow,
 } = require('./window');
 const {
   publishNote: { getNote },
@@ -37,7 +37,7 @@ ipcMain.handle('publishRefreshCookies', openRefreshCookieWindow);
 //
 ipcMain.handle('publishSetCookie', openSetCookieWindow);
 //
-ipcMain.handle('publishNote', openPublishWindow);
+ipcMain.handle('publishPublishNote', openPublishWindow);
 //
-ipcMain.handle('openPublishWindow', openHomeWindow);
+ipcMain.handle('publishOpenPlatformWindow', openPlatformWindow);
 //

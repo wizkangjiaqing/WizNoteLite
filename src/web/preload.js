@@ -169,8 +169,8 @@ class UserManager extends EventEmitter {
     return result;
   }
 
-  async openPublishWindow(kbGuid, noteGuid) {
-    const result = await invokeApi('openPublishWindow', this.userGuid, kbGuid, noteGuid);
+  async openPlatformWindow(kbGuid, noteGuid) {
+    const result = await invokeApi('publishOpenPlatformWindow', this.userGuid, kbGuid, noteGuid);
     return result;
   }
 
@@ -180,7 +180,7 @@ class UserManager extends EventEmitter {
   }
 
   async publishNote(userGuid, kbGuid, noteGuid, platformIds) {
-    const result = await invokeApi('publishNote', userGuid, kbGuid, noteGuid, platformIds);
+    const result = await invokeApi('publishPublishNote', userGuid, kbGuid, noteGuid, platformIds);
     return result;
   }
 
@@ -339,6 +339,10 @@ ipcRenderer.on('linksChanged', (event, ...args) => {
 
 ipcRenderer.on('showAbout', (event, ...args) => {
   userManager.emit('showAbout', ...args);
+});
+
+ipcRenderer.on('publishPlatformChange', (event, ...args) => {
+  userManager.emit('publishPlatformChange', ...args);
 });
 
 function init(options) {

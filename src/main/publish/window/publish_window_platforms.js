@@ -2,11 +2,11 @@ const { BrowserWindow } = require('electron');
 const path = require('path');
 const url = require('url');
 const { getCurrentLang } = require('../../i18n');
+const { platformWindows } = require('./window_helper');
+
 //
-const WindowMap = new Map();
-//
-async function openHomeWindow(event, userGuid, kbGuid, noteGuid) {
-  const openedWindow = WindowMap.get(noteGuid);
+async function openPlatformWindow(event, userGuid, kbGuid, noteGuid) {
+  const openedWindow = platformWindows.get(noteGuid);
   if (openedWindow) {
     openedWindow.show();
     return;
@@ -31,8 +31,9 @@ async function openHomeWindow(event, userGuid, kbGuid, noteGuid) {
   window.loadURL(`${publishUrl}?lang=${lang}&page=publish&noteGuid=${noteGuid}`);
   //
   window.on('close', () => {
-    WindowMap.delete(noteGuid);
+    platformWindows.delete(noteGuid);
   });
+  platformWindows.set(noteGuid, window);
 }
 
-module.exports = openHomeWindow;
+module.exports = openPlatformWindow;
