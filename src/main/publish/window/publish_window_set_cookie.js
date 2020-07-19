@@ -13,17 +13,20 @@ async function openSetCookieWindow(event, platformId) {
     show: true,
     webPreferences: { nodeIntegration: false },
   });
-  await window.loadURL(platform.url.login);
   const page = await pie.getPage(browser, window);
   //
   window.on('close', async () => {
     const cookies = await page.cookies();
-    const exists = cookies.some(({ name, value, domain }) => name === platform.cookies.name
+    const exists = cookies.some(({
+      name, value, domain, expires,
+    }) => name === platform.cookies.name
       && domain === platform.cookies.domain
+      && expires > 0
       && value);
     await setPlatformCookie(platformId, exists);
     platformWindows.onPlatformChange();
   });
+  await window.loadURL(platform.url.login);
 }
 
 module.exports = openSetCookieWindow;

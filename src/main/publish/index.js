@@ -14,7 +14,9 @@ async function publishGetWebPlatforms(event, userGuid, kbGuid, noteGuid) {
   const platforms = await getPlatforms();
   //
   const webPlatforms = [];
-  for (const { icon, id, name, intro } of platforms) {
+  for (const {
+    icon, id, name, intro,
+  } of platforms) {
     const webPlatform = {
       icon, id, name, intro,
     };

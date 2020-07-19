@@ -10,6 +10,8 @@ import TableContainer from '@material-ui/core/TableContainer';
 import TableHead from '@material-ui/core/TableHead';
 import TableRow from '@material-ui/core/TableRow';
 import Paper from '@material-ui/core/Paper';
+import Button from '@material-ui/core/Button';
+import IconButton from '@material-ui/core/IconButton';
 import LiteText from '../components/LiteText';
 //
 
@@ -32,7 +34,6 @@ const style = (theme) => ({
 class Publish extends React.Component {
   handler = {
     initWebPlatforms: async () => {
-      window.wizApi.userManager.on('publishPlatformChange', this.handler.handlePlatformChange);
       const { user: { userGuid }, kbGuid, noteGuid } = this.props;
       const platforms = await this.handler.publishGetWebPlatforms(userGuid, kbGuid, noteGuid);
       this.setState({ platforms });
@@ -41,16 +42,18 @@ class Publish extends React.Component {
       await window.wizApi.userManager.publishSetCookie(platformId);
     },
     publish: async (userGuid, kbGuid, noteGuid, platform) => {
-      if (platform.status) {
+      if (platform.status === 1) {
         return;
       }
       if (!platform.logged) {
         return;
       }
-      await window.wizApi.userManager.publish(userGuid, kbGuid, noteGuid, [platform.id]);
+      await window.wizApi.userManager.publishNote(userGuid, kbGuid, noteGuid, [platform.id]);
     },
     publishGetWebPlatforms: async (userGuid, kbGuid, noteGuid) => {
-      const initialData = await window.wizApi.userManager.publishGetWebPlatforms(userGuid, kbGuid, noteGuid);
+      const initialData = await window.wizApi.userManager.publishGetWebPlatforms(
+        userGuid, kbGuid, noteGuid,
+      );
       return initialData;
     },
     getLoggedText: ({ logged }) => (logged ? '已登录' : '未登录'),
@@ -112,22 +115,31 @@ class Publish extends React.Component {
                 <TableCell align="center">{platform.intro}</TableCell>
                 <TableCell align="center">
                   <div className={classes.multi}>
-                    <LiteText className={classNames(platform.logged ? classes.enable : classes.disable)}>
+                    <LiteText
+                      className={classNames(platform.logged ? classes.enable : classes.disable)}
+                    >
                       {this.handler.getLoggedText(platform)}
                     </LiteText>
-                    <LiteText title={this.handler.getStatusTip(platform)} className={classNames(platform.published ? classes.enable : classes.disable)}>
+                    <LiteText
+                      title={this.handler.getStatusTip(platform)}
+                      className={classNames(platform.published ? classes.enable : classes.disable)}
+                    >
                       {this.handler.getStatusText(platform)}
                     </LiteText>
                   </div>
                 </TableCell>
                 <TableCell align="center">
                   <div className={classes.multi}>
-                    <LiteText onClick={() => { this.handler.setCookie(platform); }} className={classNames(classes.enable)}>
+                    <Button onClick={() => { this.handler.setCookie(platform); }}>
                       Cookie
-                    </LiteText>
-                    <LiteText onClick={() => { this.handler.publish(user.userGuid, kbGuid, noteGuid, platform); }} title="点击发布" className={classNames(classes.enable)}>
-                      {this.handler.getStatusText(platform.status)}
-                    </LiteText>
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        this.handler.publish(user.userGuid, kbGuid, noteGuid, platform);
+                      }}
+                    >
+                      发布
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

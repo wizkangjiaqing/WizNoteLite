@@ -30,8 +30,7 @@ class Window extends EventEmitter {
   }
 
   sendMessageToAll(channel, ...args) {
-    const noteGuids = this.windows.keys();
-    noteGuids.forEach((noteGuid) => {
+    this.windows.forEach((window, noteGuid) => {
       this.sendMessageToSpecific(noteGuid, channel, ...args);
     });
   }

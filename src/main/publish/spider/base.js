@@ -1,195 +1,239 @@
 const { BrowserWindow, app } = require('electron');
 const pie = require('puppeteer-in-electron');
 const puppeteer = require('puppeteer-core');
+const fs = require('fs-extra');
+const path = require('path');
+const url = require('url');
 //
 class Base {
-  constructor(title, markdown, images, platform, options) {
+  constructor(title, markdown, images, platform) {
     this.title = title;
     this.markdown = markdown;
     this.images = images;
     this.platform = platform;
-    this.options = options;
+  }
+
+  async publish() {
+    this.operation = 'publish';
+    await this.run();
   }
 
   destroy() {
     this.window.destroy();
   }
 
-  async run() {
-    await this.init();
-    //
-    await this.goToEditor();
-    //
-    await this.checkCookie();
-    //
-    await this.beforeEdit();
-    //
-    await this.edit();
-    //
-    await this.afterEdit();
-    //
-    await this.beforePublish();
-    //
-    await this.publish();
-    //
-    await this.afterPublish();
+  throwError(name, message, stack) {
+    const err = new Error();
+    err.name = name;
+    err.message = message;
+    err.stack = stack || err.stack;
+    throw err;
   }
 
-  async afterPublish() {
-    this.window.destroy();
-  }
-
-  async publish() {
-    let el;
-    if (this.options.draft) {
-      el = await this.page.$(this.platform.el.draft);
-      if (!el) {
-        throw new Error(`draft button (selector: ${this.platform.el.draft}) cannot be found`);
-      }
-    } else {
-      el = await this.page.$(this.platform.el.publish);
-      if (!el) {
-        throw new Error(`publish button (selector: ${this.platform.el.publish}) cannot be found`);
-      }
+  async getElement(sel) {
+    try {
+      const ele = await this.page.waitForSelector(sel, { timeout: 10000 });
+      return ele;
+    } catch (err) {
+      this.throwError(`INVALID_ELEMENT`, err.message, err.stack);
+      return null;
     }
-    await el.click();
   }
 
-  async beforePublish() {
-    console.log('before publish');
+  async click(sel) {
+    const ele = await this.getElement(sel);
+    await ele.click();
+    await this.wait();
+  }
+
+  async getElementProperty(sel, key) {
+    const value = await this.page.$eval(sel, (e, property) => e[property], key);
+    return value;
+  }
+
+  log(message) {
+    console.log(`spider: ${message}`);
+  }
+
+  async wait(duration = 5000) {
+    await this.page.waitFor(duration);
+  }
+
+  async run() {
+    try {
+      await this.checkParams();
+      //
+      await this.initWindow();
+      //
+      await this.goToEditor();
+      //
+      await this.checkCookie();
+      //
+      await this.beforeEdit();
+      //
+      await this.edit();
+      //
+      await this.afterEdit();
+      //
+      await this.beforeSubmit();
+      //
+      await this.submit();
+      //
+      await this.afterSubmit();
+    } finally {
+      if (this.contentFile) {
+        await fs.remove(this.contentFile);
+      }
+      // this.destroy();
+    }
+  }
+
+  async afterSubmit() {
+    this.log('after submit');
+  }
+
+  async submit() {
+    this.log('sumit');
+    const sels = this.platform.el[this.operation];
+    for (const sel of sels) {
+      await this.click(sel);
+    }
+  }
+
+  async beforeSubmit() {
+    this.log('before publish');
+    await this.wait();
   }
 
   async afterEdit() {
-    console.log('after edit');
+    this.log('after edit');
+    await this.wait();
   }
 
   async edit() {
-    await this.inputTitle();
+    this.log('edit');
+    await this.getElement(this.platform.el.title);
+    await this.page.evaluate(this.inputTitle, this.title, this.platform);
     await this.uploadImages();
     await this.convertContent();
-    await this.inputContent();
-  }
-
-  async inputContent() {
-    if (this.platform.inputContentType === 'import') {
+    if (this.platform.contentType === 'import') {
+      await this.getElement(this.platform.el.content);
       await this.importContent();
     } else {
-      await this.insertContent();
+      await this.page.evaluate(this.inputContent, this.markdown, this.platform);
     }
   }
 
-  async insertContent() {
-    const elContent = await this.page.$(this.platform.el.content);
-    if (!elContent) {
-      throw new Error(`content (selector: ${this.platform.el.content}) cannot be found`);
-    }
-    await this.page.evaluate(async (sel, content) => {
-      const el = document.querySelector(sel);
-      el.focus();
+  async inputContent(markdown, platform) {
+    const el = document.querySelector(platform.el.content);
+    el.focus();
+    try {
       el.select();
-      document.execCommand('delete', false);
-      document.execCommand('insertText', content);
-    }, this.platform.el.content, this.markdown);
+    } catch (err) {
+      //
+    }
+    document.execCommand('delete', false);
+    document.execCommand('insertText', false, markdown);
   }
 
   async importContent() {
-    // save markdown to file
-    const file = '';
-    const importButton = await this.page.$(this.platform.el.importButton);
-    const importInput = await this.page.$(this.platform.el.importInput);
-    if (!importButton) {
-      throw new Error(`import button (selector: ${this.platform.el.importButton}) cannot be found`);
+    await this.saveContent2File();
+    //
+    for (const sel of this.platform.el.importButton) {
+      await this.click(sel);
     }
-    if (!importInput) {
-      throw new Error(`import input (selector: ${this.platform.el.importInput}) cannot be found`);
-    }
-    await importButton.click();
-    await importInput.uploadFile(file);
+    //
+    const importInput = await this.getElement(this.platform.el.importInput);
+    await importInput.uploadFile(this.contentFile);
+    //
+  }
+
+  async saveContent2File() {
+    const contentFile = path.join(app.getPath('appData'), app.name, `${Date.now().toString()}.md`);
+    await fs.writeFile(contentFile, this.markdown);
+    this.contentFile = contentFile;
   }
 
   async convertContent() {
-    console.log('convertContent');
+    this.log('convert content');
   }
 
   async uploadImages() {
     if (this.images.length === 0) {
       return;
     }
-    const imageButton = await this.page.$(this.platform.el.imageButton);
-    const imageInput = await this.page.$(this.platform.el.imageInput);
-    if (!imageButton) {
-      throw new Error(`image input (selector: ${this.platform.el.imageButton}) cannot be found`);
-    }
-    if (!imageInput) {
-      throw new Error(`image input (selector: ${this.platform.el.imageInput}) cannot be found`);
-    }
     for (const image of this.images) {
-      await imageButton.click();
-      await imageInput.uploadFile(image);
+      for (const sel of this.platform.el.imageButton) {
+        await this.click(sel);
+      }
+      const imageInput = await this.getElement(this.platform.el.imageInput);
+      await imageInput.uploadFile(image.filePath);
+      await this.wait();
+      let imageUrl = await this.getImageUrl();
+      const { protocol, host, pathname } = url.parse(imageUrl);
+      imageUrl = `${protocol}//${host}${pathname}`;
+      this.markdown = this.markdown.replace(image.src, imageUrl);
     }
   }
 
-  async inputTitle() {
-    const elTitle = await this.page.$(this.platform.el.title);
-    if (!elTitle) {
-      throw new Error(`title (selector: ${this.platform.el.title}) cannot be found`);
-    }
-    await this.page.evaluate(async (sel, title) => {
-      const el = document.querySelector(sel);
-      el.focus();
-      el.select();
-      document.execCommand('delete', false);
-      document.execCommand('insertText', false, title);
-    }, this.platform.el.title, this.title);
+  async getImageUrl() {
+    //
+  }
+
+  async inputTitle(title, platform) {
+    const el = document.querySelector(platform.el.title);
+    el.focus();
+    el.select();
+    document.execCommand('delete', false);
+    document.execCommand('insertText', false, title);
   }
 
   async beforeEdit() {
-    console.log('before edit');
+    this.log('before edit');
   }
 
   async checkCookie() {
+    this.log('check cookie');
     const cookies = await this.page.cookies();
     const exists = cookies.some(({ name, value, domain }) => value
     && name === this.platform.cookies.name
     && domain === this.platform.cookies.domain);
-    // 通知 保存状态
     if (!exists) {
-      this.destroy();
-      throw new Error(`cookie error`);
+      this.throwError('COOKIE_ERROR', 'not login');
     }
   }
 
   async goToEditor() {
+    this.log('go to editor');
     await this.window.loadURL(this.platform.url.editor);
   }
 
-  async init() {
-    await this.checkParams();
-    //
-    await this.initWindow();
-  }
-
   async initWindow() {
+    this.log('init window');
     this.browser = await pie.connect(app, puppeteer);
     this.window = new BrowserWindow({
-      show: false,
+      show: true,
       webPreferences: { nodeIntegration: false },
+      width: 1080,
+      height: 720,
     });
     this.page = await pie.getPage(this.browser, this.window);
   }
 
   async checkParams() {
+    this.log('check params');
+    let message = null;
     if (!this.title) {
-      throw new Error(`no title`);
+      message = `no title`;
+    } else if (!this.markdown) {
+      message = `no markdown`;
+    } else if (!this.images) {
+      message = `no images`;
+    } else if (!this.platform) {
+      message = `no platform`;
     }
-    if (!this.markdown) {
-      throw new Error(`no markdown`);
-    }
-    if (!this.images) {
-      throw new Error(`no images`);
-    }
-    if (!this.platform) {
-      throw new Error(`no platform`);
+    if (message) {
+      this.throwError(`INVALID_PARAMA`, message);
     }
   }
 }

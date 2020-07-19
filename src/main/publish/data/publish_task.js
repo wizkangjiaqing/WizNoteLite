@@ -28,14 +28,12 @@ async function getTasks(userGuid, kbGuid, noteGuid) {
   return tasks;
 }
 
-async function addTask(userGuid, kbGuid, noteGuid, platformId) {
+async function addTask(userGuid, kbGuid, noteGuid, platformId, status, message, preview) {
   const guid = uuidv4();
-  const status = 0;
-  const message = '未发布';
   const created = Date.now();
   const modified = Date.now();
   const task = {
-    guid, userGuid, kbGuid, noteGuid, status, message, platformId, created, modified,
+    guid, userGuid, kbGuid, noteGuid, status, message, platformId, created, modified, preview,
   };
   //
   const tasks = await getTasks(userGuid, kbGuid, noteGuid);
@@ -73,10 +71,18 @@ async function updateTask(userGuid, kbGuid, noteGuid, taskGuid, status, message,
   await save2file(userGuid, kbGuid, noteGuid, tasks);
 }
 
+async function getTask(userGuid, kbGuid, noteGuid, platformId) {
+  const tasks = await getTasks(userGuid, kbGuid, noteGuid);
+  const task = tasks.find((value) => (noteGuid === value.noteGuid
+    && platformId === value.platformId));
+  return task;
+}
+
 module.exports = {
   getTasks,
   addTask,
   deleteTask,
   deleteNoteTask,
   updateTask,
+  getTask,
 };
