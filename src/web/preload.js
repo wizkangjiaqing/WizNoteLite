@@ -179,13 +179,18 @@ class UserManager extends EventEmitter {
     return result;
   }
 
-  async publishNote(userGuid, kbGuid, noteGuid, platformIds) {
-    const result = await invokeApi('publishPublishNote', userGuid, kbGuid, noteGuid, platformIds);
+  async publishNote(userGuid, kbGuid, noteGuid, platformIds, options) {
+    const result = await invokeApi('publishPublishNote', userGuid, kbGuid, noteGuid, platformIds, options);
     return result;
   }
 
   async publishGetWebPlatforms(userGuid, kbGuid, noteGuid) {
     const result = await invokeApi('publishGetWebPlatforms', userGuid, kbGuid, noteGuid);
+    return result;
+  }
+
+  async previewArticle(previewUrl) {
+    const result = await invokeApi('publishPreview', previewUrl);
     return result;
   }
 

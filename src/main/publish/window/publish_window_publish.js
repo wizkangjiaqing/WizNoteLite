@@ -1,7 +1,9 @@
 const fs = require('fs-extra');
 const path = require('path');
 const users = require('../../user/users');
-const { publishPlatform: { getPlatforms }, publishTask: { addTask, getTask, updateTask } } = require('../data');
+const {
+  publishPlatform: { getPlatforms }, publishTask: { addTask, getTask, updateTask },
+  publishCookie: { setPlatformCookie } } = require('../data');
 const { platformWindows } = require('./window_helper');
 const spiders = require('../spider');
 const { getNoteResources } = require('../../common/paths');
@@ -17,7 +19,7 @@ async function getNoteImages(userGuid, kbGuid, noteGuid, markdown) {
   return images;
 }
 //
-async function openPublishWindow(event, userGuid, kbGuid, noteGuid, platformIds) {
+async function openPublishWindow(event, userGuid, kbGuid, noteGuid, platformIds, options) {
   const note = await users.getNote(userGuid, kbGuid, noteGuid);
   const markdown = await users.getNoteMarkdown(userGuid, kbGuid, noteGuid);
   const images = await getNoteImages(userGuid, kbGuid, noteGuid, markdown);
@@ -26,17 +28,25 @@ async function openPublishWindow(event, userGuid, kbGuid, noteGuid, platformIds)
   //
   for (const platform of platforms) {
     let status = 0;
-    let message = '未发布';
-    const preview = null;
+    let message = 'publishTaskInitial';
+    let preview = null;
     try {
-      const spider = new spiders[platform.id](note.title, markdown, images, platform);
-      await spider.publish();
-      status = 1;
-      message = '成功';
+      const spider = new spiders[platform.id](note.title, markdown, images, platform, options);
+      preview = await spider.execute();
+      if (options.operation === 'publish') {
+        status = 1;
+        message = 'publishTaskPublished';
+      } else {
+        status = 2;
+        message = 'publishTaskDraft';
+      }
     } catch (err) {
       console.error(err);
       status = -1;
-      message = '错误';
+      message = err.name;
+      if (err.name === 'publishCookieError') {
+        await setPlatformCookie(platform.id, false);
+      }
     } finally {
       const task = await getTask(userGuid, kbGuid, noteGuid, platform.id);
       if (task) {

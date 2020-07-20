@@ -1,3 +1,4 @@
+/* eslint-disable no-param-reassign */
 const { BrowserWindow, app } = require('electron');
 const pie = require('puppeteer-in-electron');
 const puppeteer = require('puppeteer-core');
@@ -6,16 +7,23 @@ const path = require('path');
 const url = require('url');
 //
 class Base {
-  constructor(title, markdown, images, platform) {
+  VALID_OPERATIONS = ['publish', 'draft'];
+
+  constructor(title, markdown, images, platform, options = {}) {
     this.title = title;
     this.markdown = markdown;
     this.images = images;
     this.platform = platform;
+    if (!options.tags) options.tags = [];
+    if (!options.operation) options.operation = 'publish';
+    if (!this.VALID_OPERATIONS.includes(options.operation)) {
+      this.throwError(`publishInvalidParams`, `invalid operation: ${options.operation}`);
+    }
+    this.options = options;
   }
 
-  async publish() {
-    this.operation = 'publish';
-    await this.run();
+  draft() {
+    return this.options.operation === 'draft';
   }
 
   destroy() {
@@ -30,23 +38,35 @@ class Base {
     throw err;
   }
 
+  async evaluate(pageFunction, ...args) {
+    const result = await this.page.evaluate(pageFunction, ...args);
+    await this.wait();
+    return result;
+  }
+
   async getElement(sel) {
     try {
       const ele = await this.page.waitForSelector(sel, { timeout: 10000 });
       return ele;
     } catch (err) {
-      this.throwError(`INVALID_ELEMENT`, err.message, err.stack);
+      this.throwError(`publishInvalidElement`, err.message, err.stack);
       return null;
     }
   }
 
   async click(sel) {
-    const ele = await this.getElement(sel);
-    await ele.click();
+    await this.getElement(sel);
+    await this.page.click(sel);
+    await this.wait();
+  }
+
+  async pressKey(key) {
+    await this.page.keyboard.press(key);
     await this.wait();
   }
 
   async getElementProperty(sel, key) {
+    await this.getElement(sel);
     const value = await this.page.$eval(sel, (e, property) => e[property], key);
     return value;
   }
@@ -59,7 +79,7 @@ class Base {
     await this.page.waitFor(duration);
   }
 
-  async run() {
+  async execute() {
     try {
       await this.checkParams();
       //
@@ -80,6 +100,8 @@ class Base {
       await this.submit();
       //
       await this.afterSubmit();
+      //
+      return this.preview;
     } finally {
       if (this.contentFile) {
         await fs.remove(this.contentFile);
@@ -94,46 +116,46 @@ class Base {
 
   async submit() {
     this.log('sumit');
-    const sels = this.platform.el[this.operation];
+    const sels = this.platform.el[this.options.operation];
+    if (!sels) {
+      await this.wait();
+      return;
+    }
     for (const sel of sels) {
       await this.click(sel);
     }
   }
 
   async beforeSubmit() {
-    this.log('before publish');
+    if (this.draft()) {
+      return;
+    }
     await this.wait();
+    await this.inputTags();
+  }
+
+  async inputTags() {
+    //
   }
 
   async afterEdit() {
-    this.log('after edit');
     await this.wait();
   }
 
   async edit() {
-    this.log('edit');
     await this.getElement(this.platform.el.title);
-    await this.page.evaluate(this.inputTitle, this.title, this.platform);
+    await this.evaluate(this.inputTitle, this.title, this.platform);
+    //
     await this.uploadImages();
+    //
     await this.convertContent();
+    //
+    await this.getElement(this.platform.el.content);
     if (this.platform.contentType === 'import') {
-      await this.getElement(this.platform.el.content);
       await this.importContent();
     } else {
-      await this.page.evaluate(this.inputContent, this.markdown, this.platform);
+      await this.evaluate(this.inputContent, this.markdown, this.platform);
     }
-  }
-
-  async inputContent(markdown, platform) {
-    const el = document.querySelector(platform.el.content);
-    el.focus();
-    try {
-      el.select();
-    } catch (err) {
-      //
-    }
-    document.execCommand('delete', false);
-    document.execCommand('insertText', false, markdown);
   }
 
   async importContent() {
@@ -146,6 +168,7 @@ class Base {
     const importInput = await this.getElement(this.platform.el.importInput);
     await importInput.uploadFile(this.contentFile);
     //
+    await this.wait();
   }
 
   async saveContent2File() {
@@ -159,52 +182,54 @@ class Base {
   }
 
   async uploadImages() {
-    if (this.images.length === 0) {
-      return;
-    }
     for (const image of this.images) {
       for (const sel of this.platform.el.imageButton) {
         await this.click(sel);
       }
+      //
       const imageInput = await this.getElement(this.platform.el.imageInput);
       await imageInput.uploadFile(image.filePath);
+      //
       await this.wait();
-      let imageUrl = await this.getImageUrl();
-      const { protocol, host, pathname } = url.parse(imageUrl);
-      imageUrl = `${protocol}//${host}${pathname}`;
+      //
+      await this.confirmUploadImage();
+      //
+      await this.wait();
+      //
+      const imageUrl = await this.getImageUrl();
       this.markdown = this.markdown.replace(image.src, imageUrl);
     }
+  }
+
+  async parseImageUrl(imageUrl) {
+    const { protocol, host, pathname } = url.parse(imageUrl);
+    const parsedUrl = `${protocol}//${host}${pathname}`;
+    return parsedUrl;
   }
 
   async getImageUrl() {
     //
   }
 
-  async inputTitle(title, platform) {
-    const el = document.querySelector(platform.el.title);
-    el.focus();
-    el.select();
-    document.execCommand('delete', false);
-    document.execCommand('insertText', false, title);
+  async confirmUploadImage() {
+    //
   }
 
   async beforeEdit() {
-    this.log('before edit');
+    //
   }
 
   async checkCookie() {
-    this.log('check cookie');
     const cookies = await this.page.cookies();
     const exists = cookies.some(({ name, value, domain }) => value
     && name === this.platform.cookies.name
     && domain === this.platform.cookies.domain);
     if (!exists) {
-      this.throwError('COOKIE_ERROR', 'not login');
+      this.throwError('publishCookieError', 'not login');
     }
   }
 
   async goToEditor() {
-    this.log('go to editor');
     await this.window.loadURL(this.platform.url.editor);
   }
 
@@ -214,7 +239,7 @@ class Base {
     this.window = new BrowserWindow({
       show: true,
       webPreferences: { nodeIntegration: false },
-      width: 1080,
+      width: 1200,
       height: 720,
     });
     this.page = await pie.getPage(this.browser, this.window);
@@ -233,8 +258,38 @@ class Base {
       message = `no platform`;
     }
     if (message) {
-      this.throwError(`INVALID_PARAMA`, message);
+      this.throwError(`publishInvalidParams`, message);
     }
+  }
+
+  /**
+   * function execute in browser context
+   */
+  async inputTitle(title, platform) {
+    const el = document.querySelector(platform.el.title);
+    el.focus();
+    try {
+      el.select();
+    } catch (err) {
+      console.error(err);
+    }
+    document.execCommand('delete', false);
+    document.execCommand('insertText', false, title);
+  }
+
+  /**
+   * function execute in browser context
+   */
+  async inputContent(markdown, platform) {
+    const el = document.querySelector(platform.el.content);
+    el.focus();
+    try {
+      el.select();
+    } catch (err) {
+      console.error(err);
+    }
+    document.execCommand('delete', false);
+    document.execCommand('insertText', false, markdown);
   }
 }
 

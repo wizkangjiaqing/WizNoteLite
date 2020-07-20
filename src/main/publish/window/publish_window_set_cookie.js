@@ -18,10 +18,9 @@ async function openSetCookieWindow(event, platformId) {
   window.on('close', async () => {
     const cookies = await page.cookies();
     const exists = cookies.some(({
-      name, value, domain, expires,
+      name, value, domain,
     }) => name === platform.cookies.name
       && domain === platform.cookies.domain
-      && expires > 0
       && value);
     await setPlatformCookie(platformId, exists);
     platformWindows.onPlatformChange();

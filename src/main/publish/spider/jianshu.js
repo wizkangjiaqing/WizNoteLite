@@ -7,7 +7,7 @@ class Jianshu extends Base {
     await this.page.hover('.fa-keyboard-o');
     await this.wait();
     //
-    await this.page.evaluate(() => {
+    await this.evaluate(async () => {
       document.querySelectorAll('span').forEach((span) => {
         if (span.textContent.trim() === 'MarkDown编辑器') {
           span.click();
@@ -16,7 +16,7 @@ class Jianshu extends Base {
     });
     await this.wait();
     //
-    await this.page.evaluate(() => {
+    await this.page.evaluate(async () => {
       document.querySelectorAll('span').forEach((span) => {
         if (span.textContent.trim() === '新建文章') {
           span.click();
@@ -28,15 +28,20 @@ class Jianshu extends Base {
 
   async getImageUrl() {
     const content = await this.page.$eval(this.platform.el.content, (e) => e.value);
-    await this.page.evaluate((platform) => {
+    await this.evaluate(async (platform) => {
       const ele = document.querySelector(platform.el.content);
       ele.focus();
-      ele.select();
+      try {
+        ele.select();
+      } catch (err) {
+        console.error(err);
+      }
       document.execCommand('delete', false);
     }, this.platform);
     const start = content.indexOf('https:');
     const end = content.indexOf('?');
-    return content.slice(start, end);
+    const imageUrl = content.slice(start, end);
+    return this.parseImageUrl(imageUrl);
   }
 }
 

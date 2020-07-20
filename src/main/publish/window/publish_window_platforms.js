@@ -14,8 +14,10 @@ async function openPlatformWindow(event, userGuid, kbGuid, noteGuid) {
   //
   const window = new BrowserWindow({
     show: true,
+    width: 1200,
+    height: 720,
     webPreferences: {
-      nodeIntegration: true,
+      nodeIntegration: false,
       preload: path.join(__dirname, '..', '..', '..', 'web', 'preload.js'),
     },
   });
