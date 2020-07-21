@@ -43,6 +43,28 @@ class Jianshu extends Base {
     const imageUrl = content.slice(start, end);
     return this.parseImageUrl(imageUrl);
   }
+
+  async afterSubmit() {
+    let preview = null;
+    if (this.draft()) {
+      preview = await this.page.url();
+    } else {
+      preview = await this.evaluate(async (title) => {
+        const eles = document.querySelectorAll('a');
+        for (const a of eles) {
+          if (a.textContent.trim() === title) {
+            return a.href;
+          }
+        }
+        return null;
+      }, this.title);
+    }
+    if (preview) {
+      this.preview = preview;
+    } else {
+      this.throwError(`publishUnknownError`, `result check error`);
+    }
+  }
 }
 
 module.exports = Jianshu;
