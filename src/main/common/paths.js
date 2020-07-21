@@ -48,6 +48,14 @@ function getPublishTempFile(userGuid, randomName) {
   return path.join(p, randomName);
 }
 
+function getTempPath() {
+  const base = app.getPath('temp');
+  const rand = new Date().valueOf();
+  const newTemp = path.join(base, `${rand}`);
+  fs.ensureDirSync(newTemp);
+  return newTemp;
+}
+
 module.exports = {
   getAppData,
   getUsersData,
@@ -57,4 +65,5 @@ module.exports = {
   getPublish,
   getPublishNoteTasksFile,
   getPublishTempFile,
+  getTempPath,
 };

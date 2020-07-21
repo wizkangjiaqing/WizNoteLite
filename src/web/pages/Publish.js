@@ -15,7 +15,6 @@ import Dialog from '@material-ui/core/Dialog';
 import DialogContent from '@material-ui/core/DialogContent';
 import LiteText from '../components/LiteText';
 import LiteInput from '../components/LiteInput';
-import window from '../../main/publish/window';
 //
 
 

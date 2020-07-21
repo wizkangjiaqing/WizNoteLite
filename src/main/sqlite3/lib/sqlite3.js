@@ -1,7 +1,7 @@
 var binding = require('../build/Release/wizsqlite3.node');
 var sqlite3 = module.exports = exports = binding;
 var EventEmitter = require('events').EventEmitter;
-
+var path = require('path');
 function normalizeMethod (fn) {
     return function (sql) {
         var errBack;

@@ -2,6 +2,7 @@ import React from 'react';
 import './App.css';
 import PropTypes from 'prop-types';
 import { withStyles } from '@material-ui/core/styles';
+import queryString from 'query-string';
 // v4.5.12 Document: https://formatjs.io/docs/react-intl
 import { IntlProvider } from 'react-intl';
 import moment from 'moment';
@@ -9,11 +10,11 @@ import 'moment/locale/zh-cn';
 import 'moment/locale/zh-tw';
 import 'moment/locale/zh-hk';
 import 'moment/locale/zh-mo';
-import queryString from 'query-string';
 
 import Login from './pages/Login';
 import Main from './pages/Main';
 import Publish from './pages/Publish';
+import NoteViewer from './pages/NoteViewer';
 import AboutDialog from './components/AboutDialog';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import localeMessages from './locale';
@@ -83,6 +84,9 @@ class App extends React.Component {
       showAboutDialog: false,
     };
     this.shouldAutoLogging = true;
+    const params = queryString.parse(window.location.search);
+    this._params = params;
+    this._viewNote = params.kbGuid && params.noteGuid;
   }
 
   componentDidMount() {
@@ -137,15 +141,25 @@ class App extends React.Component {
                 mergeLocalAccount={mergeLocalAccount}
               />
             )}
-            {loggedIn && !isAutoLogging && page === 'main' && (
-              <Main
-                kbGuid={kbGuid}
-                user={currentUser}
-                onLoggedIn={this.handler.handleLoggedIn}
-                mergeLocalAccount={mergeLocalAccount}
-                onCreateAccount={this.handler.handleCreateAccount}
-                onInvalidPassword={this.handler.handleInvalidPassword}
-              />
+            {page !== 'publish' && loggedIn && !isAutoLogging && (
+              this._viewNote
+                ? (
+                  <NoteViewer
+                    kbGuid={this._params.kbGuid}
+                    noteGuid={this._params.noteGuid}
+                    params={this._params}
+                  />
+                )
+                : (
+                  <Main
+                    kbGuid={kbGuid}
+                    user={currentUser}
+                    onLoggedIn={this.handler.handleLoggedIn}
+                    mergeLocalAccount={mergeLocalAccount}
+                    onCreateAccount={this.handler.handleCreateAccount}
+                    onInvalidPassword={this.handler.handleInvalidPassword}
+                  />
+                )
             )}
             {loggedIn && !isAutoLogging && page === 'publish' && (
               <Publish

@@ -80,6 +80,7 @@ LiteText.propTypes = {
   children: PropTypes.oneOfType([
     PropTypes.string,
     PropTypes.array,
+    PropTypes.element,
   ]),
   className: PropTypes.string,
   inheritColor: PropTypes.bool,
