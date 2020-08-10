@@ -31,8 +31,9 @@ const useStyles = makeStyles(({ spacing, palette }) => ({
 function SyncBtn(props) {
   const classes = useStyles();
 
-  const [updatedTime, setUpdatedTime] = useState('');
   const [isSyncing, setSyncing] = useState(false);
+  const [error, setError] = useState(null);
+  const [currentNote, setCurrentNote] = useState(props.note);
 
   async function handleClick() {
     try {
@@ -54,24 +55,32 @@ function SyncBtn(props) {
     setSyncing(true);
   }
 
-  function handleSyncFinish() {
+  function handleSyncFinish(kbGuid, result) {
     setSyncing(false);
+    setError(result.error);
   }
 
   useEffect(() => {
-    function handleUploadNote(note) {
-      if (note.guid === props.note.guid && note.version >= 0) {
-        setUpdatedTime(dateUtils.formatDateString(note.modified, props.intl));
+    function handleUploadNote(kbGuid, note) {
+      if (note.guid === props.note.guid) {
+        setCurrentNote(note);
       }
     }
 
+    function handleModifyNote(kbGuid, note) {
+      if (note.guid === props.note.guid) {
+        setCurrentNote(note);
+      }
+    }
+
+    setCurrentNote(props.note);
+    window.wizApi.userManager.on('modifyNote', handleModifyNote);
     window.wizApi.userManager.on('uploadNote', handleUploadNote);
     window.wizApi.userManager.on('syncStart', handleSyncStart);
     window.wizApi.userManager.on('syncFinish', handleSyncFinish);
 
-    setUpdatedTime(dateUtils.formatDateString(props.note.modified, props.intl));
-
     return () => {
+      window.wizApi.userManager.off('modifyNote', handleModifyNote);
       window.wizApi.userManager.off('uploadNote', handleUploadNote);
       window.wizApi.userManager.off('syncStart', handleSyncStart);
       window.wizApi.userManager.off('syncFinish', handleSyncFinish);
@@ -80,18 +89,58 @@ function SyncBtn(props) {
 
   const isLocalUser = window.wizApi.userManager.currentUser.isLocalUser;
   const isLoggedIn = !isLocalUser;
+  //
+  const isSynced = currentNote?.version >= 0;
 
   function infoRender() {
+    //
+    let message;
+    if (isLoggedIn) {
+      if (isSynced) {
+        message = props.intl.formatMessage({ id: 'editorFooterSynced' });
+      } else {
+        const modifiedTime = dateUtils.formatDateString(currentNote.modified, props.intl);
+        message = props.intl.formatMessage({ id: 'editorFooterLocalChanged' }, {
+          modifiedTime,
+        });
+      }
+    } else {
+      message = props.intl.formatMessage({ id: 'editorFooterLocalUser' });
+    }
+    //
     return (
       <div className={classes.syncInfo}>
         <span className={classes.label}>
-          {isLoggedIn
-            ? `${props.intl.formatMessage({ id: 'editorFooterSyncTime' })}:`
-            : props.intl.formatMessage({ id: 'editorFooterLocal' })}
+          {message}
         </span>
-        {isLoggedIn && (<span className={classes.value}>{updatedTime}</span>)}
       </div>
     );
+  }
+
+  let err = false;
+  let syncing = false;
+  if (error || !isLoggedIn) {
+    err = true;
+  } else {
+    syncing = isSyncing;
+  }
+
+  let icon = null;
+  if (err) {
+    icon = <Icons.UploadErrorIcon className={props.iconClassName} />;
+  } else {
+    // eslint-disable-next-line no-lonely-if
+    if (isSynced) {
+      icon = (
+        <Icons.SelectedIcon
+          className={props.iconClassName}
+        />
+      );
+    } else if (syncing) {
+      icon = <SyncingIcon />;
+    } else {
+      icon = <Icons.UploadIcon className={props.iconClassName} />;
+    }
   }
 
   return (
@@ -107,11 +156,8 @@ function SyncBtn(props) {
           <IconButton
             className={props.className}
             onClick={handleClick}
-            disabled={isSyncing}
           >
-            {isLoggedIn && isSyncing && <SyncingIcon />}
-            {isLoggedIn && !isSyncing && <Icons.RefreshIcon className={props.iconClassName} />}
-            {!isLoggedIn && <Icons.UploadIcon className={props.iconClassName} />}
+            {icon}
           </IconButton>
         </div>
       </Tooltip>

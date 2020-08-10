@@ -28,12 +28,15 @@ class MarkdownEditor extends React.Component {
     handleNoteModified: () => {
       this.saveNote();
     },
-    handleInsertImages: async () => {
+    handleInsertImages: async (successCb) => {
       if (!this.editor) {
         return;
       }
       const { kbGuid, note } = this.props;
       const files = await this.props.onSelectImages(kbGuid, note.guid);
+      if (files.length && successCb) {
+        successCb();
+      }
       files.forEach((src) => {
         this.editor.insertValue(`![image](${src})`);
       });
@@ -131,6 +134,12 @@ class MarkdownEditor extends React.Component {
     }
     const { kbGuid } = this.props;
     //
+    const contentId = this.editor.contentId;
+    if (contentId !== note.guid) {
+      // 校验 editor 为当前笔记时，才能保存
+      return;
+    }
+
     let markdown = this.editor.getValue();
     const wizPathReg = new RegExp(this.resourceUrl, 'ig');
     markdown = markdown.replace(wizPathReg, 'index_files');
@@ -197,6 +206,7 @@ class MarkdownEditor extends React.Component {
           onInsertImageFromData={this.handler.handleInsertImagesFromData}
           tagList={tagList}
           autoSelectTitle={note && new Date().getTime() - note.created <= 10 * 1000}
+          onUpdateContentsList={this.props.onUpdateContentsList}
         />
       </div>
     );
@@ -212,11 +222,13 @@ MarkdownEditor.propTypes = {
   onSaveNote: PropTypes.func.isRequired,
   onSelectImages: PropTypes.func.isRequired,
   onClickTag: PropTypes.func.isRequired,
+  onUpdateContentsList: PropTypes.func,
 };
 
 MarkdownEditor.defaultProps = {
   note: null,
   kbGuid: null,
+  onUpdateContentsList: null,
 };
 
 export default withTheme(withStyles(styles)(MarkdownEditor));

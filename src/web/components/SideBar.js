@@ -23,7 +23,7 @@ import Tags from './Tags';
 import Icons from '../config/icons';
 
 const SIDEBAR_WIDTH = '15%';
-const SIDEBAR_MIN_WIDTH = 120;
+const SIDEBAR_MIN_WIDTH = 192;
 const SIDEBAR_MAX_WIDTH = 320;
 
 const styles = (theme) => ({
@@ -349,7 +349,13 @@ class SideBar extends React.Component {
         style={drawerStyle}
         ref={(node) => { this._drawerRef = node; }}
       >
-        <CommonHeader showLogo liteLogo className={classes.header} />
+        <CommonHeader
+          showLogo
+          showUserType
+          liteLogo
+          className={classes.header}
+          onUpgradeVip={this.props.onUpgradeVip}
+        />
         <List disablePadding>
           {items.map((item) => (
             <ListItem
@@ -463,6 +469,7 @@ SideBar.propTypes = {
   selectedTag: PropTypes.object,
   open: PropTypes.bool,
   onClickLogin: PropTypes.func.isRequired,
+  onUpgradeVip: PropTypes.func.isRequired,
   // onClickSetting: PropTypes.func.isRequired,
 };
 

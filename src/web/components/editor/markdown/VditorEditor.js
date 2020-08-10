@@ -4,6 +4,7 @@ import isEqual from 'lodash/isEqual';
 import WizVditor from 'wiz-vditor';
 import classNames from 'classnames';
 import { withStyles } from '@material-ui/core/styles';
+import debounce from 'lodash/debounce';
 import InsertMenu from './InsertMenu';
 import HeadingMenu from './HeadingMenu';
 import 'wiz-vditor/dist/index.css';
@@ -13,7 +14,10 @@ import InsertTagMenu from './InsertTagMenu';
 import {
   isCtrl, filterParentElement, hasClass, getDomIndexForParent,
 } from '../libs/dom_utils';
-import { getRange, getSelection } from '../libs/range_utils';
+import { getRange, getSelection, resetRange } from '../libs/range_utils';
+import TableMenu from './TableMenu';
+import TableToolbar from './TableToolbar';
+import ImageMenu from './ImageMenu';
 
 const styles = (/* theme */) => ({
   hideBlockType: {
@@ -25,9 +29,13 @@ const styles = (/* theme */) => ({
 class VditorEditor extends React.Component {
   resourceUrl = '';
 
-  waitSetValue = null;
+  waitNoteData = null;
 
   isShowTagMenu = false;
+
+  curContentId = null;
+
+  resetValueTimer = null;
 
   timeStamp = new Date().getTime();
 
@@ -136,6 +144,7 @@ class VditorEditor extends React.Component {
         isFocus,
       }));
     },
+    handleMouseDown: (e) => this.fixLink(e) || this.fixImage(e) || this.fixChangeImage(e),
   }
   // 统计词数
   // setWordsNumber = debounce(() => {
@@ -145,6 +154,59 @@ class VditorEditor extends React.Component {
   //     );
   //   }
   // }, 800);
+
+  updateContentsList = debounce(() => {
+    if (this.props.onUpdateContentsList) {
+      const list = [];
+      if (this.editor?.vditor) {
+        const editorRootElement = this.editor.vditor.ir.element;
+        for (let i = 0; i < editorRootElement.childElementCount; i++) {
+          const tagName = editorRootElement.children[i].tagName.toLowerCase();
+          if (/^h[1-6]$/.test(tagName)) {
+            const rank = parseInt(tagName[1], 10);
+            if (list.length) {
+              let target = list;
+              for (let j = 1; j < rank; j++) {
+                if (target.length === 0) {
+                  target.push({
+                    key: `${i}-${rank}`,
+                    children: [],
+                    open: true,
+                  });
+                } else if (!target[target.length - 1].children) {
+                  target[target.length - 1].children = [];
+                }
+                target = target[target.length - 1].children;
+              }
+              target.push({
+                key: `${i}-${rank}`,
+                title: editorRootElement.children[i].innerText.replace(/^#+\s/, ''),
+                element: editorRootElement.children[i],
+                open: true,
+              });
+            } else {
+              list.push({});
+              let item = list[list.length - 1];
+              for (let j = 0; j < rank; j++) {
+                if (j === rank - 1) {
+                  item.key = `${i}-${j}`;
+                  item.title = editorRootElement.children[i].innerText.replace(/^#+\s/, '');
+                  item.element = editorRootElement.children[i];
+                  item.open = true;
+                } else {
+                  item.key = `${i}-${j}`;
+                  item.open = true;
+                  item.children = [{}];
+                  item = item.children[0];
+                }
+              }
+            }
+          }
+        }
+      }
+      this.props.onUpdateContentsList(list);
+    }
+  }, 300);
 
   constructor(props) {
     super(props);
@@ -189,7 +251,12 @@ class VditorEditor extends React.Component {
       // content changed
       // console.log('setValue: ' + nextProps.value);
       this.resourceUrl = nextProps.resourceUrl;
-      this.resetValue(nextProps.value);
+      // 编辑器 focus 操作，会导致 react 报错 'unstable_flushDiscreteUpdates: Cannot flush updates when React is already rendering.'
+      // 使用 setTimeout 可以规避此问题
+      window.clearTimeout(this.resetValueTimer);
+      this.resetValueTimer = setTimeout(() => {
+        this.resetValue(nextProps.contentId, nextProps.value);
+      }, 0);
     }
     if (nextState.isInitedEditor && !this.state.isInitedEditor) {
       updated = true;
@@ -251,13 +318,17 @@ class VditorEditor extends React.Component {
         const { onInit, disabled } = this.props;
         if (onInit) {
           onInit(this.editor);
-          if (this.waitSetValue) {
-            this.resetValue(this.waitSetValue);
-            this.waitSetValue = null;
+          if (this.waitNoteData) {
+            this.resetValue(this.waitNoteData.contentId, this.waitNoteData.value);
+            this.waitNoteData = null;
           }
         }
         if (disabled) {
           this.setEditorDisabled();
+        }
+        this.updateContentsList();
+        if (this.editor?.vditor?.element) {
+          this.editor.vditor.element.addEventListener('mousedown', this.handler.handleMouseDown);
         }
         // this._removePanelNode();
       },
@@ -265,11 +336,14 @@ class VditorEditor extends React.Component {
         const { onInput } = this.props;
         // this.setWordsNumber();
         if (onInput) onInput(text, html ?? this.editor.getHTML());
+        this.updateContentsList();
       },
       preview: {
+        theme: {
+          path: `${cdn}/dist/css/content-theme`,
+        },
         transform: (html) => {
           // console.log('------------ transform before -----------' + this.resourceUrl);
-          // console.log(html);
 
           const imgReg = /(<img\s+([^>]*\s+)?(data-src|src)=")index_files(\/[^"]*")/ig;
           let newHtml = html.replace(imgReg, (str, m1, m2, m3, m4) => m1 + this.resourceUrl + m4);
@@ -342,7 +416,6 @@ class VditorEditor extends React.Component {
             'export',
             'outline',
             'preview',
-            'format',
             'devtools',
             'info',
             'help',
@@ -421,6 +494,59 @@ class VditorEditor extends React.Component {
     return html;
   }
 
+  fixLink(e) {
+    const LinkElement = filterParentElement(e.target, this.editor.vditor.element, (dom) => dom.getAttribute('data-type') === 'a', true);
+    if (LinkElement) {
+      const afterStyle = window.getComputedStyle(LinkElement, ':after');
+      if (isCtrl(e) || (e.target === LinkElement && e.offsetX >= parseInt(afterStyle.getPropertyValue('left'), 10) && e.offsetY >= parseInt(afterStyle.getPropertyValue('top'), 10))) {
+        const urlElement = LinkElement.querySelector('.vditor-ir__marker--link');
+        if (urlElement.innerText) {
+          try {
+            window.open(urlElement.innerText);
+          } catch (err) {
+            console.error(err);
+          }
+          e.preventDefault();
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  fixImage(e) {
+    if (e.target.tagName.toLowerCase() === 'img') {
+      const containerElement = filterParentElement(e.target, this.editor.vditor.element, (dom) => hasClass(dom, 'vditor-ir__node'));
+      if (containerElement) {
+        const urlElement = containerElement.querySelector('.vditor-ir__marker--link');
+        // 修复没有data type
+        if (!containerElement.getAttribute('data-type')) {
+          containerElement.setAttribute('data-type', 'img');
+        }
+
+        if (urlElement) {
+          const range = document.createRange();
+          range.selectNodeContents(urlElement);
+          resetRange(range);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  fixChangeImage(e) {
+    if (e.target.parentElement && e.target.parentElement.getAttribute('data-type') === 'img' && e.target === e.target.parentElement.children[0]) {
+      e.preventDefault();
+      const range = document.createRange();
+      const imgContainer = e.target.parentElement;
+      range.setStartAfter(imgContainer);
+      resetRange(range);
+
+      this.props.onInsertImage(() => imgContainer.remove());
+    }
+  }
+
   // 触发Vditor隐藏菜单点击事件
   emitVditorTooltipEvent(type) {
     if (this.editor?.vditor.element) {
@@ -454,12 +580,14 @@ class VditorEditor extends React.Component {
     }
   }
 
-  resetValue(value) {
+  resetValue(contentId, value) {
     if (!this.isEditorReady()) {
-      this.waitSetValue = value;
+      this.waitNoteData = { contentId, value };
       return;
     }
+    this.editor.contentId = contentId;
     this.editor.setValue(value, true);
+    this.updateContentsList();
     setTimeout(() => {
       // this.setWordsNumber();
       this.focusEnd();
@@ -504,6 +632,9 @@ class VditorEditor extends React.Component {
     // Down (Chrome Patch: 文字 后面跟着 img，img 被自动换行，这时候从该行前面的问题使用 下方向键，无法将光标移动到后面的段落)
     const sel = getSelection();
     let range = getRange();
+    if (filterParentElement(range.startContainer, this.editor.vditor.element, (dom) => dom.tagName.toLowerCase() === 'table')) {
+      return;
+    }
     try {
       sel.modify('move', 'forward', 'line');
       const rangeNew = getRange;
@@ -572,6 +703,19 @@ class VditorEditor extends React.Component {
           wordList={this.tags}
           onChangeShowState={this.handler.handleChangeTagMenuShowState}
         />
+        <TableMenu
+          editor={this.editor}
+          onSaveNote={this.props.onSave}
+        />
+        <ImageMenu
+          editor={this.editor}
+          onSaveNote={this.props.onSave}
+          onInsertImage={this.props.onInsertImage}
+        />
+        <TableToolbar
+          editor={this.editor}
+          onSaveNote={this.props.onSave}
+        />
       </div>
     );
   }
@@ -599,6 +743,7 @@ VditorEditor.propTypes = {
   tagList: PropTypes.object,
   autoSelectTitle: PropTypes.bool,
   hideBlockType: PropTypes.bool,
+  onUpdateContentsList: PropTypes.func,
 };
 
 VditorEditor.defaultProps = {
@@ -620,6 +765,7 @@ VditorEditor.defaultProps = {
   tagList: {},
   autoSelectTitle: false,
   hideBlockType: false,
+  onUpdateContentsList: null,
 };
 
 export default withStyles(styles)(VditorEditor);

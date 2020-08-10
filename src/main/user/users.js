@@ -33,12 +33,13 @@ class Users {
       //
       await dataStore.copyLocalAccount(localUser, user);
       const db = await dataStore.openPersonalDb(user.userGuid, user.kbGuid);
-      await db.updateAccount(userId, password, server, user);
       // //
       const userData = new UserData();
       await userData.setUser(user, db, accountServer);
       this._userMap.set(user.userGuid, userData);
       this.initEvents(user.userGuid, db);
+      //
+      await db.updateAccount(userId, password, server, user);
       //
       if (options && options.autoLogin) {
         globalSettings.setLastAccount(user.userGuid);
@@ -80,7 +81,7 @@ class Users {
   }
 
   async getLink(userGuid, name) {
-    const userData = await this.getUserData(userGuid);
+    const userData = this.getUserData(userGuid);
     await userData.getLink(name);
   }
 
@@ -170,8 +171,21 @@ class Users {
     return user;
   }
 
+  getUserInfo(userGuid) {
+    const userData = this.getUserData(userGuid);
+    const user = userData.user;
+    //
+    return user;
+  }
+
+  async refreshUserInfo(userGuid) {
+    const userData = this.getUserData(userGuid);
+    const user = await userData.refreshUserInfo();
+    return user;
+  }
+
   async logout(userGuid) {
-    const userData = await this.getUserData(userGuid);
+    const userData = this.getUserData(userGuid);
     await dataStore.closeDb(userData.user.kbGuid);
     globalSettings.setLastAccount('');
     this.emitEvent(userGuid, 'logout');
@@ -179,12 +193,14 @@ class Users {
   }
 
   async createNote(userGuid, kbGuid, note) {
-    const db = await this.getUserData(userGuid).getDb(kbGuid);
+    const userData = this.getUserData(userGuid);
+    const db = await userData.getDb(kbGuid);
     await db.createNote(note);
   }
 
   async deleteNote(userGuid, kbGuid, noteGuid) {
-    const db = await this.getUserData(userGuid).getDb(kbGuid);
+    const userData = this.getUserData(userGuid);
+    const db = await userData.getDb(kbGuid);
     const note = await db.getNote(noteGuid);
     if (!note) {
       return;
@@ -197,7 +213,8 @@ class Users {
   }
 
   async putBackNote(userGuid, kbGuid, noteGuid) {
-    const db = await this.getUserData(userGuid).getDb(kbGuid);
+    const userData = this.getUserData(userGuid);
+    const db = await userData.getDb(kbGuid);
     const note = await db.getNote(noteGuid);
     if (!note) {
       return;
@@ -330,6 +347,10 @@ class Users {
 
   emitEvent(userGuid, eventName, ...args) {
     const userData = this.getUserData(userGuid);
+    if (!userData) {
+      console.error(`failed to get user data: ${userGuid}, ${new Error().stack}`);
+      return;
+    }
     const windows = userData.windows;
     if (!windows) {
       return;
@@ -384,6 +405,9 @@ class Users {
       const kbGuid = await db.getKbGuid();
       this.emitEvent(userGuid, 'linksChanged', kbGuid, noteGuid);
     });
+    db.on('userInfoChanged', async (user) => {
+      this.emitEvent(userGuid, 'userInfoChanged', user);
+    });
     //
 
     const userData = this.getUserData(userGuid);
@@ -392,11 +416,11 @@ class Users {
       this.emitEvent(userGuid, 'syncStart', kbGuid);
     });
 
-    userData.on('syncFinish', (_userGuid, kbGuid, ret) => {
-      this.emitEvent(userGuid, 'syncFinish', kbGuid, ret);
+    userData.on('syncFinish', (_userGuid, kbGuid, ret, options) => {
+      this.emitEvent(userGuid, 'syncFinish', kbGuid, ret, options);
     });
 
-    userData.on('syncError', (_userGuid, kbGuid, err) => {
+    userData.on('syncError', (_userGuid, kbGuid, err, options) => {
       const error = {
         code: err.code,
         externCode: err.externCode,
@@ -405,7 +429,7 @@ class Users {
         returnMessage: err.returnMessage,
         stack: err.stack,
       };
-      this.emitEvent(userGuid, 'syncFinish', kbGuid, { error });
+      this.emitEvent(userGuid, 'syncFinish', kbGuid, { error }, options);
     });
 
     userData.on('downloadNotes', (_userGuid, kbGuid, downloadedNotes) => {

@@ -5,6 +5,7 @@ import { withStyles } from '@material-ui/core/styles';
 import queryString from 'query-string';
 // v4.5.12 Document: https://formatjs.io/docs/react-intl
 import { IntlProvider } from 'react-intl';
+import { SnackbarProvider } from 'notistack';
 import moment from 'moment';
 import 'moment/locale/zh-cn';
 import 'moment/locale/zh-tw';
@@ -14,11 +15,12 @@ import 'moment/locale/zh-mo';
 import Login from './pages/Login';
 import Main from './pages/Main';
 import NoteViewer from './pages/NoteViewer';
-import AboutDialog from './components/AboutDialog';
+import AboutDialog from './dialogs/AboutDialog';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import localeMessages from './locale';
 import { getLocale } from './utils/lang';
 import onlineApi from './OnlineApi';
+import Icons from './config/icons';
 
 if (window.navigator.userAgent.indexOf(' Electron/') === -1) {
   window.wizApi = onlineApi;
@@ -29,19 +31,13 @@ const styles = (/* theme */) => ({
     width: '100%',
     height: '100vh',
   },
+  snackbarIcon: {
+    width: 16,
+    paddingRight: 8,
+  },
 });
 
 const locale = getLocale();
-const langMap = {
-  en: 'en',
-  'zh-cn': 'zh-cn',
-};
-window.wizApi.init({
-  lang: langMap[locale] ?? 'en',
-});
-window.wizApi.platform = {
-  isMac: window.wizApi.isElectron && window.wizApi.windowManager.platform === 'darwin',
-};
 
 moment.locale(locale);
 const messages = Object.assign(localeMessages.en, localeMessages[locale]);
@@ -67,7 +63,10 @@ class App extends React.Component {
     handleCloseAboutDialog: () => {
       this.setState({ showAboutDialog: false });
     },
-    handleShowAboutDialog: () => {
+    handleShowAboutDialog: (id) => {
+      if (id !== 'menuShowAbout') {
+        return;
+      }
       this.setState({ showAboutDialog: true });
     },
   }
@@ -88,7 +87,46 @@ class App extends React.Component {
 
   componentDidMount() {
     window.wizApi.userManager.on('logout', this.handler.handleLogout);
-    window.wizApi.userManager.on('showAbout', this.handler.handleShowAboutDialog);
+    window.wizApi.userManager.on('menuItemClicked', this.handler.handleShowAboutDialog);
+    //
+    const syncData = async (user) => {
+      try {
+        const um = window.wizApi.userManager;
+        if (um.currentUser.isLocalUser) {
+          return;
+        }
+        //
+        await um.refreshUserInfo();
+        await um.syncKb(user.kbGuid, {
+          noWait: true,
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    //
+    if (this.shouldAutoLogging) {
+      this.shouldAutoLogging = false;
+      window.document.addEventListener('DOMContentLoaded', () => {
+        window.wizApi.userManager.localLogin().then((user) => {
+          if (user) {
+            syncData(user);
+            this.setState({
+              currentUser: user,
+              isAutoLogging: false,
+              mergeLocalAccount: !!user.isLocalUser,
+            });
+          } else {
+            this.setState({ isAutoLogging: false });
+          }
+        });
+      });
+    }
+  }
+
+  componentWillUnmount() {
+    window.wizApi.userManager.off('logout', this.handler.handleLogout);
+    window.wizApi.userManager.off('menuItemClicked', this.handler.handleShowAboutDialog);
   }
 
   //
@@ -102,26 +140,6 @@ class App extends React.Component {
     const loggedIn = currentUser;
     const kbGuid = currentUser?.kbGuid;
     //
-    if (this.shouldAutoLogging) {
-      this.shouldAutoLogging = false;
-      window.document.addEventListener('DOMContentLoaded', () => {
-        window.wizApi.userManager.localLogin().then((user) => {
-          if (user) {
-            window.wizApi.userManager.syncKb(user.kbGuid, {
-              noWait: true,
-            });
-            this.setState({
-              currentUser: user,
-              isAutoLogging: false,
-              mergeLocalAccount: !!user.isLocalUser,
-            });
-          } else {
-            this.setState({ isAutoLogging: false });
-          }
-        });
-      });
-    }
-
     if (!isAutoLogging) {
       window.document.body.className = window.document.body.className.replace('loading', '');
     }
@@ -131,38 +149,50 @@ class App extends React.Component {
           locale={locale}
           messages={messages}
         >
-          <div className={classes.root}>
-            {!loggedIn && !isAutoLogging && (
-              <Login
-                onLoggedIn={this.handler.handleLoggedIn}
-                mergeLocalAccount={mergeLocalAccount}
-              />
-            )}
-            {loggedIn && !isAutoLogging && (
-              this._viewNote
-                ? (
-                  <NoteViewer
-                    kbGuid={this._params.kbGuid}
-                    noteGuid={this._params.noteGuid}
-                    params={this._params}
-                  />
-                )
-                : (
-                  <Main
-                    kbGuid={kbGuid}
-                    user={currentUser}
-                    onLoggedIn={this.handler.handleLoggedIn}
-                    mergeLocalAccount={mergeLocalAccount}
-                    onCreateAccount={this.handler.handleCreateAccount}
-                    onInvalidPassword={this.handler.handleInvalidPassword}
-                  />
-                )
-            )}
-          </div>
-          <AboutDialog
-            open={showAboutDialog}
-            onClose={this.handler.handleCloseAboutDialog}
-          />
+          <SnackbarProvider
+            maxSnack={3}
+            preventDuplicate
+            classes={{
+              anchorOriginTopCenter: 'snackbar-top-center',
+            }}
+            iconVariant={{
+              error: <Icons.WarningIcon className={classes.snackbarIcon} />,
+            }}
+          >
+
+            <div className={classes.root}>
+              {!loggedIn && !isAutoLogging && (
+                <Login
+                  onLoggedIn={this.handler.handleLoggedIn}
+                  mergeLocalAccount={mergeLocalAccount}
+                />
+              )}
+              {loggedIn && !isAutoLogging && (
+                this._viewNote
+                  ? (
+                    <NoteViewer
+                      kbGuid={this._params.kbGuid}
+                      noteGuid={this._params.noteGuid}
+                      params={this._params}
+                    />
+                  )
+                  : (
+                    <Main
+                      kbGuid={kbGuid}
+                      user={currentUser}
+                      onLoggedIn={this.handler.handleLoggedIn}
+                      mergeLocalAccount={mergeLocalAccount}
+                      onCreateAccount={this.handler.handleCreateAccount}
+                      onInvalidPassword={this.handler.handleInvalidPassword}
+                    />
+                  )
+              )}
+            </div>
+            <AboutDialog
+              open={showAboutDialog}
+              onClose={this.handler.handleCloseAboutDialog}
+            />
+          </SnackbarProvider>
         </IntlProvider>
       </ThemeSwitcher>
     );

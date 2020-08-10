@@ -8,23 +8,19 @@ const URL = require('url');
 const path = require('path');
 const PImage = require('pureimage');
 const i18next = require('i18next');
+const log = require('electron-log');
 
 const users = require('./user/users');
 const globalSettings = require('./settings/global_settings');
 const wait = require('./utils/wait');
 const paths = require('./common/paths');
+const inAppPurchase = require('./inapp/in_app_purchase');
 
 const isDebug = false;
 
 function unregisterWindow(window) {
   users.unregisterWindow(window.webContents);
 }
-
-ipcMain.on('init', (event, options) => {
-  console.log(options);
-  // eslint-disable-next-line no-param-reassign
-  event.returnValue = {};
-});
 
 async function handleApi(name, api) {
   ipcMain.handle(name, async (event, ...args) => {
@@ -55,12 +51,18 @@ handleApi('getLink', async (event, ...args) => {
 handleApi('signUp', async (event, ...args) => {
   const user = await users.signUp(...args);
   users.registerWindow(user.userGuid, event.sender);
+  // 因为registerWindow在login/signup之后，所以消息没有正常发出。在这里强制发送一下消息
+  users.emitEvent(user.userGuid, 'userInfoChanged', user);
+  //
   return user;
 });
 
 handleApi('onlineLogin', async (event, ...args) => {
   const user = await users.onlineLogin(...args);
   users.registerWindow(user.userGuid, event.sender);
+  // 因为registerWindow在login/signup之后，所以消息没有正常发出。在这里强制发送一下消息
+  users.emitEvent(user.userGuid, 'userInfoChanged', user);
+  //
   return user;
 });
 
@@ -69,6 +71,8 @@ handleApi('localLogin', async (event, ...args) => {
   const user = await users.localLogin(...args);
   if (user) {
     users.registerWindow(user.userGuid, event.sender);
+    // 因为registerWindow在login/signup之后，所以消息没有正常发出。在这里强制发送一下消息
+    users.emitEvent(user.userGuid, 'userInfoChanged', user);
   }
   return user;
 });
@@ -237,7 +241,11 @@ handleApi('captureScreen', async (event, userGuid, kbGuid, noteGuid, options = {
       const totalHeight = noteOptions.height;
       const windowWidth = window.getSize()[0];
       window.setSize(windowWidth, pageHeight);
-      await window.webContents.executeJavaScript('window.requestAnimationFrame;');
+      try {
+        await window.webContents.executeJavaScript('window.requestAnimationFrame;0;');
+      } catch (err) {
+        console.error(err);
+      }
       const pageCount = Math.floor((totalHeight + pageHeight - 1) / pageHeight);
       //
       const images = [];
@@ -259,7 +267,11 @@ handleApi('captureScreen', async (event, userGuid, kbGuid, noteGuid, options = {
         const top = await window.webContents.executeJavaScript(`document.getElementById('wiz-note-content-root').parentElement.scrollTop;`);
         //
         await wait(300); // wait scrollbar
-        await window.webContents.executeJavaScript('window.requestAnimationFrame;');
+        try {
+          await window.webContents.executeJavaScript('window.requestAnimationFrame;0;');
+        } catch (err) {
+          console.error(err);
+        }
         const image = await window.capturePage();
         const imageSize = image.getSize();
         if (i === 0) {
@@ -455,6 +467,70 @@ handleApi('printToPDF', async (event, userGuid, kbGuid, noteGuid, options = {}) 
       }, 1000);
     }
   });
+});
+
+handleApi('writeToMarkdown', async (event, userGuid, kbGuid, noteGuid) => {
+  const webContents = event.sender;
+  const browserWindow = BrowserWindow.fromWebContents(webContents);
+  //
+  const note = await users.getNote(userGuid, kbGuid, noteGuid);
+  const fileName = noteTitleToFileName(note.title);
+  //
+  const dialogResult = await dialog.showSaveDialog(browserWindow, {
+    properties: ['saveFile'],
+    defaultPath: `${fileName}.md`,
+    filters: [{
+      name: i18next.t('fileFilterMarkdown'),
+      extensions: [
+        'md',
+      ],
+    }],
+  });
+
+  if (dialogResult.canceled) return;
+  //
+  const filePath = dialogResult.filePath;
+  const targetDirname = path.dirname(filePath);
+  const targetFilesDirname = path.join(targetDirname, 'index_files');
+  //
+  const resourcePath = await paths.getNoteResources(userGuid, kbGuid, noteGuid);
+  const files = await fs.readdir(resourcePath);
+  //
+  if (!fs.existsSync(targetFilesDirname) && files.length) {
+    await fs.mkdir(targetFilesDirname);
+  }
+  //
+  for (const file of files) {
+    const oldFilePath = path.join(resourcePath, file);
+    const newFilePath = path.join(targetFilesDirname, file);
+    await fs.copyFile(oldFilePath, newFilePath);
+  }
+  //
+  const data = await users.getNoteMarkdown(userGuid, kbGuid, noteGuid);
+  await fs.writeFile(filePath, data);
+  //
+  shell.showItemInFolder(filePath);
+});
+
+handleApi('queryProducts', inAppPurchase.queryProducts);
+handleApi('purchaseProduct', inAppPurchase.purchaseProduct);
+handleApi('restorePurchases', inAppPurchase.restorePurchases);
+handleApi('showUpgradeVipDialog', inAppPurchase.showUpgradeVipDialog);
+
+handleApi('getUserInfo', async (event, userGuid) => {
+  const user = users.getUserInfo(userGuid);
+  return user;
+});
+
+
+handleApi('refreshUserInfo', async (event, userGuid) => {
+  const user = await users.refreshUserInfo(userGuid);
+  return user;
+});
+
+handleApi('viewLogFile', async () => {
+  const logPath = log.transports.file.file;
+  shell.openPath(logPath);
 });
 
 

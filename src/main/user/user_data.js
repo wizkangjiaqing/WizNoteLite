@@ -27,7 +27,7 @@ class UserData extends EventEmitter {
     this._user = user;
     this._personalDb = personalDb;
     this._as = accountServer;
-    this._delayedSyncKb = debounce(this._syncKbCore, 10 * 1000); // delay 10 seconds
+    this._delayedSyncKb = debounce(this._syncKbCore, 3 * 1000); // delay 3 seconds
     this._userSettings = new UserSettings(user.userGuid);
     //
     this._refreshToken = async () => {
@@ -54,6 +54,17 @@ class UserData extends EventEmitter {
       }
     };
     //
+  }
+
+  async refreshUserInfo() {
+    if (this._user.isLocalUser) {
+      throw new WizKnownError(i18next.t('messageNoAccount', 'No account'), 'WizErrorNoAccount');
+    }
+    const db = this._personalDb;
+    const newUser = await this._as.refreshUserInfo(this.token);
+    this._user = newUser;
+    await db.updateUserInfo(newUser);
+    return newUser;
   }
 
   getLink(name) {
@@ -213,13 +224,12 @@ class UserData extends EventEmitter {
         this.emit('syncStart', this.userGuid, task.kbGuid);
       });
 
-      syncTask.on('finish', (task, ret) => {
-        this.emit('syncFinish', this.userGuid, task.kbGuid, ret);
+      syncTask.on('finish', (task, ret, syncOptions) => {
+        this.emit('syncFinish', this.userGuid, task.kbGuid, ret, syncOptions);
       });
 
-      syncTask.on('error', (err) => {
-        const task = err.task;
-        this.emit('syncError', this.userGuid, task.kbGuid, err);
+      syncTask.on('error', (task, err, syncOptions) => {
+        this.emit('syncError', this.userGuid, task.kbGuid, err, syncOptions);
       });
 
       syncTask.on('downloadNotes', (task, notes) => {

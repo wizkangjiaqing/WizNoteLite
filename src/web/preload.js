@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const { remote, ipcRenderer } = require('electron');
+const platform = require('platform');
 
 const { Menu, MenuItem } = remote;
 
@@ -23,14 +24,6 @@ async function invokeApi(name, ...args) {
 }
 
 class WindowManager {
-  constructor() {
-    this._platform = process.platform;
-  }
-
-  get platform() {
-    return this._platform;
-  }
-
   toggleMaximize() {
     const window = remote.getCurrentWindow();
     if (window.isFullScreen()) {
@@ -89,19 +82,26 @@ class WindowManager {
     if (!this._systemMenu) {
       const options = [
         {
-          label: intl.formatMessage({ id: 'sendFeedback' }),
+          label: intl.formatMessage({ id: 'menuSendFeedback' }),
           click() {
             window.open('https://support.qq.com/products/174045');
           },
         },
         {
-          label: intl.formatMessage({ id: 'devTool' }),
+          label: intl.formatMessage({ id: 'menuDevTool' }),
           role: 'toggledevtools',
         },
         {
-          label: intl.formatMessage({ id: 'about' }),
+          label: intl.formatMessage({ id: 'menuAbout' }),
           click() {
-            window.wizApi.userManager.emit('showAbout');
+            window.wizApi.userManager.emit('menuItemClicked', 'menuShowAbout');
+          },
+        },
+        { type: 'separator' },
+        {
+          label: intl.formatMessage({ id: 'menuQuit' }),
+          click() {
+            remote.app.quit();
           },
         },
       ];
@@ -280,6 +280,11 @@ class UserManager extends EventEmitter {
     return result;
   }
 
+  async writeToMarkdown(kbGuid, noteGuid) {
+    const result = await invokeApi('writeToMarkdown', this.userGuid, kbGuid, noteGuid);
+    return result;
+  }
+
   async buildBindSnsUrl(server, type, postMessage, origin, extraParams) {
     const path = '/as/thirdparty/go/auth';
     const query = {
@@ -297,6 +302,40 @@ class UserManager extends EventEmitter {
     return url;
   }
 
+  async queryProducts() {
+    const result = await invokeApi('queryProducts', this.userGuid);
+    return result;
+  }
+
+  async purchaseProduct(product) {
+    const result = await invokeApi('purchaseProduct', this.userGuid, product);
+    return result;
+  }
+
+  async restorePurchases() {
+    const result = await invokeApi('restorePurchases', this.userGuid);
+    return result;
+  }
+
+  async showUpgradeVipDialog() {
+    const result = await invokeApi('showUpgradeVipDialog', this.userGuid);
+    return result;
+  }
+
+  async getUserInfo() {
+    const result = await invokeApi('getUserInfo', this.userGuid);
+    return result;
+  }
+
+  async refreshUserInfo() {
+    const result = await invokeApi('refreshUserInfo', this.userGuid);
+    return result;
+  }
+
+  async viewLogFile() {
+    const result = await invokeApi('viewLogFile', this.userGuid);
+    return result;
+  }
 
   async sendMessage(name, ...args) {
     ipcRenderer.send(name, this.userGuid, ...args);
@@ -354,18 +393,27 @@ ipcRenderer.on('linksChanged', (event, ...args) => {
   userManager.emit('linksChanged', ...args);
 });
 
-ipcRenderer.on('showAbout', (event, ...args) => {
-  userManager.emit('showAbout', ...args);
+ipcRenderer.on('menuItemClicked', (event, ...args) => {
+  const id = args[0];
+  switch (id) {
+    default: {
+      userManager.emit('menuItemClicked', ...args);
+    }
+  }
 });
 
-function init(options) {
-  ipcRenderer.sendSync('init', options);
-}
+ipcRenderer.on('userInfoChanged', (event, ...args) => {
+  userManager.emit('userInfoChanged', ...args);
+});
+
+platform.isMac = platform.os.family === 'OS X';
+platform.isWindows = platform.os.family === 'Windows';
+platform.isLinux = platform.os.family === 'Linux';
 
 window.wizApi = {
   isElectron: true,
   version: remote.app.getVersion(),
-  init,
+  platform,
   windowManager,
   userManager,
 };

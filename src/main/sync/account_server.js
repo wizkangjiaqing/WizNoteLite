@@ -33,18 +33,27 @@ class AccountServer {
   }
 
   get isOfficial() {
-    const url = URL.parse(server);
+    const url = URL.parse(this._server);
     if (url.hostname === 'as.wiz.cn') {
       return true;
     }
     return false;
   }
 
-  getLink(name) {
+  get server() {
+    return this._server;
+  }
+
+  get apiServer() {
     if (this.isOfficial) {
-      return `https://api.wiz.cn/?p=wiz&c=link&n=${name}`;
+      return `https://api.wiz.cn`;
     }
-    return `${this._server}/?p=wiz&c=link&n=${name}`;
+    return this._server;
+  }
+
+  getLink(name) {
+    const apiServer = this.apiServer;
+    return `${apiServer}/?p=wiz&c=link&n=${name}`;
   }
 
   // login
@@ -103,6 +112,28 @@ class AccountServer {
       }
     } catch (err) {
       throw new WizServerError(err.message, 'WizErrorUnknownServerVersion');
+    }
+  }
+
+  async refreshUserInfo(token) {
+    const options = {
+      url: `${this._server}/as/user/token`,
+      method: 'post',
+      data: {
+        token,
+      },
+    };
+    try {
+      const user = await WizRequest.standardRequest(options);
+      return user;
+    } catch (err) {
+      if (err.code === 301) {
+        const user = await this.login(this._server, this._user.userId, this._password, {
+          noCheckExists: true,
+        });
+        return user;
+      }
+      throw err;
     }
   }
 }

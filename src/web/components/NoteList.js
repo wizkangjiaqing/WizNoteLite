@@ -339,26 +339,6 @@ class NoteList extends React.Component {
       });
     },
 
-    handleSyncFinish: (kbGuid, result) => {
-      if (kbGuid !== this.props.kbGuid) {
-        return;
-      }
-      if (result.error) {
-        if (result.error.code === 'WizErrorInvalidPassword') {
-          alert(`invalid password`);
-          if (this.props.onInvalidPassword) {
-            this.props.onInvalidPassword();
-          }
-          return;
-        }
-        //
-        alert(result.error.message);
-      }
-      this.setState({
-        // isSyncing: false,
-      });
-    },
-
     handleNewNote: (kbGuid, note) => {
       const props = this.props;
       if (kbGuid !== props.kbGuid) {
@@ -436,7 +416,6 @@ class NoteList extends React.Component {
         this.setState({
           notes: currentNotes,
         });
-        this.props.onSelectNote(note);
       }
     },
 
@@ -506,6 +485,10 @@ class NoteList extends React.Component {
       return !!note.trash;
     }
     //
+    if (note.trash) {
+      return false;
+    }
+    //
     if (type === 'tag') {
       const tagKey = tag.key;
       if (filter === 'starred') {
@@ -546,20 +529,20 @@ class NoteList extends React.Component {
 
   initEvents() {
     window.wizApi.userManager.on('syncStart', this.handler.handleSyncStart);
-    window.wizApi.userManager.on('syncFinish', this.handler.handleSyncFinish);
     window.wizApi.userManager.on('newNote', this.handler.handleNewNote);
     window.wizApi.userManager.on('downloadNotes', this.handler.handleDownloadNotes);
     window.wizApi.userManager.on('modifyNote', this.handler.handleModifyNote);
+    window.wizApi.userManager.on('uploadNote', this.handler.handleModifyNote);
     window.wizApi.userManager.on('putBackNotes', this.handler.handlePutBackNotes);
     window.wizApi.userManager.on('deleteNotes', this.handler.handleDeleteNotes);
   }
 
   removeEvents() {
     window.wizApi.userManager.off('syncStart', this.handler.handleSyncStart);
-    window.wizApi.userManager.off('syncFinish', this.handler.handleSyncFinish);
     window.wizApi.userManager.off('newNote', this.handler.handleNewNote);
     window.wizApi.userManager.off('downloadNotes', this.handler.handleDownloadNotes);
     window.wizApi.userManager.off('modifyNote', this.handler.handleModifyNote);
+    window.wizApi.userManager.off('uploadNote', this.handler.handleModifyNote);
     window.wizApi.userManager.off('putBackNotes', this.handler.handlePutBackNotes);
     window.wizApi.userManager.off('deleteNotes', this.handler.handleDeleteNotes);
   }
@@ -751,7 +734,6 @@ NoteList.propTypes = {
   selectedNoteGuid: PropTypes.string,
   onCreateNote: PropTypes.func,
   // onSync: PropTypes.func,
-  onInvalidPassword: PropTypes.func,
   onChangeNotes: PropTypes.func,
   onToggleDrawer: PropTypes.func.isRequired,
   kbGuid: PropTypes.string,
@@ -766,7 +748,6 @@ NoteList.defaultProps = {
   selectedNoteGuid: '',
   onCreateNote: null,
   // onSync: null,
-  onInvalidPassword: null,
   onChangeNotes: null,
   kbGuid: null,
   tag: null,
