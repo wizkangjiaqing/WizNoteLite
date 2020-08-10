@@ -1,5 +1,5 @@
 {
-  "about": "About WizNote Lite",
+  "menuShowAbout": "About WizNote Lite",
   "services": "Services",
   "hide": "Hide WizNote Lite",
   "hideOther": "Hide other",
@@ -21,7 +21,7 @@
   "stopspeaking": "Stop Speaking",
   "viewMenu": "View",
   "reload": "Reload",
-  "forcereload": "Forcere Load",
+  "forcereload": "Force Reload",
   "resetzoom": "Reset Zoom",
   "zoomin": "Zoom In",
   "zoomout": "Zoom Out",
@@ -34,8 +34,17 @@
   "toggledevtools": "Toggle Developer Tools",
   "learnMore": "Learn More...",
   "menuMainWindow": "Main Window",
+  "menuViewEditorOnly": "Show Editor Only",
+  "menuViewEditorAndNotes": "Show Notes and Editor",
+  "menuViewEditorAndNotesAndTags": "Show Tags, Notes and Editor",
+
+  "errorNotAllowMakeInAppPurchase": "The user is not allowed to make in-app purchase.",
+  "errorReceiveProductionInfo": "Unable to retrieve the product information.",
+  "errorProductInNotValid": "The product is not valid.",
+  "errorDownloadReceipt": "Failed to download receipt: {{message}}",
+  "errorVerifyPurchase": "Failed to verify purchase: {{message}}",
 
   "fileFilterPNG": "PNG files (*.png)",
   "fileFilterPDF": "PDF files (*.pdf)",
-  "errorConnect": "Can't connect to server: {{host}}, please check your network."
+  "fileFilterMarkdown": "Markdown files (*.md)"
 }

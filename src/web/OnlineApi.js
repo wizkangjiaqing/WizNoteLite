@@ -7,15 +7,18 @@ import CryptoJS from 'crypto-js';
 import isEqual from 'lodash/isEqual';
 import trim from 'lodash/trim';
 import removeMd from 'remove-markdown';
-import { getResourcesFromHtml, extractTagsFromMarkdown } from '../share/note_analysis';
-import {
+import platform from 'platform';
+import { error, noteAnalysis } from 'wiznote-sdk-js-share';
+
+const {
   WizInvalidUserError,
   WizInvalidPasswordError,
   WizInvalidTokenError,
   WizNetworkError,
   WizInternalError,
   WizKnownError,
-} from '../share/error';
+} = error;
+const { getResourcesFromHtml, extractTagsFromMarkdown } = noteAnalysis;
 
 function getAsUrl() {
   if (window.location.host === 'localhost:3000') {
@@ -193,14 +196,6 @@ const globalSettings = new GlobalSettings();
 
 
 class WindowManager {
-  constructor() {
-    this._platform = '';
-  }
-
-  get platform() {
-    return this._platform;
-  }
-
   toggleMaximize() {
     console.error('not support');
   }
@@ -713,12 +708,9 @@ refreshToken = async () => {
   return token;
 };
 
-function init() {
-}
-
 export default {
   isElectron: false,
-  init,
+  platform,
   windowManager,
   userManager,
 };

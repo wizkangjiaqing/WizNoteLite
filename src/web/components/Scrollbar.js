@@ -5,7 +5,7 @@ import PropTypes from 'prop-types';
 import useMediaQuery from '@material-ui/core/useMediaQuery';
 import { Scrollbars } from 'react-custom-scrollbars';
 
-function Scrollbar(props) {
+const Scrollbar = React.forwardRef((props, ref) => {
   const {
     children,
     classes,
@@ -50,12 +50,14 @@ function Scrollbar(props) {
       autoHide={autoHide}
       autoHideTimeout={autoHideTimeout}
       renderThumbVertical={thumbRenderer}
+      renderThumbHorizontal={renderThumbVertical}
       {...others}
+      ref={ref}
     >
       {children}
     </Scrollbars>
   );
-}
+});
 
 Scrollbar.propTypes = {
   classes: PropTypes.object,

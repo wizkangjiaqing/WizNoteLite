@@ -15,29 +15,33 @@ const styles = (theme) => ({
     backgroundColor: theme.custom.background.content,
   },
   root_dark: {
+    minHeight: '100%',
+    boxSizing: 'border-box',
     backgroundColor: '#333333',
     color: '#f0f0f0',
   },
   root_lite: {
+    minHeight: '100%',
+    boxSizing: 'border-box',
     backgroundColor: 'white',
     color: '#333333',
   },
   footer: {
     borderTop: 'solid 1px',
-    lineHeight: '64px',
+    lineHeight: '80px',
     textAlign: 'center',
     '& .MuiSvgIcon-root': {
-      width: 161,
-      height: 12,
+      width: '100%',
+      height: 16,
     },
   },
   footer_lite: {
     borderColor: '#d8d8d8',
-    color: '#d8d8d8',
+    color: '#aaaaaa',
   },
   footer_dark: {
-    borderColor: '#555555',
-    color: '#555555',
+    borderColor: '#404040',
+    color: '#969696',
   },
 });
 
@@ -140,6 +144,7 @@ class NoteViewer extends React.Component {
       >
         <VditorEditor
           value={markdown}
+          disabled
           isMac={window.wizApi.platform.isMac}
           contentId={loading ? '' : noteGuid}
           onInit={this.handler.handleInitEditor}

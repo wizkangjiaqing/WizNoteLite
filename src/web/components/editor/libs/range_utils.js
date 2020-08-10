@@ -1,4 +1,3 @@
-
 export function getSelection() {
   return window.document.getSelection();
 }
@@ -9,6 +8,19 @@ export function getRange() {
     return null;
   }
   return sel.getRangeAt(0);
+}
+
+export function getRangeRect() {
+  const range = getRange();
+  let rect = range.getBoundingClientRect();
+  if (rect.y === 0 && rect.x === 0) {
+    let target = range.startContainer;
+    if (target.noteType === 3) {
+      target = target.parentNode;
+    }
+    rect = target.getBoundingClientRect();
+  }
+  return rect;
 }
 
 export function getEndOffset(dom) {
@@ -62,4 +74,18 @@ export function setRange(_start, _startOffset, _end, _endOffset) {
     // “由于出现错误 800a025e 而导致此项操作无法完成。”
     console.log(e);
   }
-};
+}
+
+export function resetRange(range) {
+  const selection = getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+export function setRangeByDomBeforeEnd(dom) {
+  if (dom) {
+    const range = document.createRange();
+    range.selectNodeContents(dom.firstChild ?? dom);
+    range.collapse(false);
+    resetRange(range);
+  }
+}

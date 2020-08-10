@@ -4,16 +4,27 @@ import isEqual from 'lodash/isEqual';
 import WizVditor from 'wiz-vditor';
 import classNames from 'classnames';
 import { withStyles } from '@material-ui/core/styles';
+import debounce from 'lodash/debounce';
+import { noteAnalysis } from 'wiznote-sdk-js-share';
+
 import InsertMenu from './InsertMenu';
 import HeadingMenu from './HeadingMenu';
 import 'wiz-vditor/dist/index.css';
 import './style.scss';
-import { REGEXP_TAG } from '../../../../share/note_analysis';
 import InsertTagMenu from './InsertTagMenu';
 import {
-  isCtrl, filterParentElement, hasClass, getDomIndexForParent,
+  isCtrl, filterParentElement, fixRangeScrollTop,
+  getCodeFromRange, getDomIndexForParent, getTableFromRange, hasClass,
 } from '../libs/dom_utils';
-import { getRange, getSelection } from '../libs/range_utils';
+import {
+  getRange, getRangeRect, getSelection, resetRange, setRange,
+} from '../libs/range_utils';
+import PageScrollAni from '../libs/PageScrollAni';
+import TableMenu from './TableMenu';
+import TableToolbar from './TableToolbar';
+import ImageMenu from './ImageMenu';
+
+const { REGEXP_TAG } = noteAnalysis;
 
 const styles = (/* theme */) => ({
   hideBlockType: {
@@ -25,9 +36,15 @@ const styles = (/* theme */) => ({
 class VditorEditor extends React.Component {
   resourceUrl = '';
 
-  waitSetValue = null;
+  waitNoteData = null;
 
   isShowTagMenu = false;
+
+  curContentId = null;
+
+  resetValueTimer = null;
+
+  pageScrollAni = null;
 
   timeStamp = new Date().getTime();
 
@@ -60,9 +77,11 @@ class VditorEditor extends React.Component {
         this.editor.vditor.irUndo.redo(this.editor.vditor);
       }
       if (e.keyCode === 13) {
+        const rectLast = getRangeRect();
         // Enter
-        // Vditor 在行首 输入回车时，不会重新渲染 改行，导致 如果行首为 Tag ，会遗留 Tag 标签样式
+        // Vditor 在行首 输入回车时，不会重新渲染 该行，导致 如果行首为 Tag ，会遗留 Tag 标签样式
         setTimeout(() => {
+          fixRangeScrollTop(this.editor.vditor.element, this.pageScrollAni, rectLast);
           const range = getRange();
           const block = filterParentElement(range.startContainer,
             this.editor.vditor.element,
@@ -104,6 +123,9 @@ class VditorEditor extends React.Component {
 
       if (e.keyCode === 40 && !e.shiftKey) {
         this.patchDownKeyForChrome(e);
+        fixRangeScrollTop(this.editor.vditor.element, this.pageScrollAni);
+      } else if (e.keyCode === 38 && !e.shiftKey) {
+        fixRangeScrollTop(this.editor.vditor.element, this.pageScrollAni);
       }
     },
     handleSelectionChange: () => {
@@ -136,6 +158,7 @@ class VditorEditor extends React.Component {
         isFocus,
       }));
     },
+    handleMouseDown: (e) => this.fixLink(e) || this.fixImage(e) || this.fixChangeImage(e),
   }
   // 统计词数
   // setWordsNumber = debounce(() => {
@@ -145,6 +168,59 @@ class VditorEditor extends React.Component {
   //     );
   //   }
   // }, 800);
+
+  updateContentsList = debounce(() => {
+    if (this.props.onUpdateContentsList) {
+      const list = [];
+      if (this.editor?.vditor) {
+        const editorRootElement = this.editor.vditor.ir.element;
+        for (let i = 0; i < editorRootElement.childElementCount; i++) {
+          const tagName = editorRootElement.children[i].tagName.toLowerCase();
+          if (/^h[1-6]$/.test(tagName)) {
+            const rank = parseInt(tagName[1], 10);
+            if (list.length) {
+              let target = list;
+              for (let j = 1; j < rank; j++) {
+                if (target.length === 0) {
+                  target.push({
+                    key: `${i}-${rank}`,
+                    children: [],
+                    open: true,
+                  });
+                } else if (!target[target.length - 1].children) {
+                  target[target.length - 1].children = [];
+                }
+                target = target[target.length - 1].children;
+              }
+              target.push({
+                key: `${i}-${rank}`,
+                title: editorRootElement.children[i].innerText.replace(/^#+\s/, ''),
+                element: editorRootElement.children[i],
+                open: true,
+              });
+            } else {
+              list.push({});
+              let item = list[list.length - 1];
+              for (let j = 0; j < rank; j++) {
+                if (j === rank - 1) {
+                  item.key = `${i}-${j}`;
+                  item.title = editorRootElement.children[i].innerText.replace(/^#+\s/, '');
+                  item.element = editorRootElement.children[i];
+                  item.open = true;
+                } else {
+                  item.key = `${i}-${j}`;
+                  item.open = true;
+                  item.children = [{}];
+                  item = item.children[0];
+                }
+              }
+            }
+          }
+        }
+      }
+      this.props.onUpdateContentsList(list);
+    }
+  }, 300);
 
   constructor(props) {
     super(props);
@@ -177,10 +253,11 @@ class VditorEditor extends React.Component {
       }
     }
     if (nextProps.disabled !== this.props.disabled && this.isEditorReady()) {
+      // TODO 临时处理 disabled 状态，用于导出图片
       if (nextProps.disabled) {
-        this.editor.disabled();
-      } else {
-        this.editor.enable();
+        this.setEditorDisabled();
+      } else if (nextProps.disabled === false) {
+        this.setEditorEnable();
       }
     }
     //
@@ -188,7 +265,13 @@ class VditorEditor extends React.Component {
       // content changed
       // console.log('setValue: ' + nextProps.value);
       this.resourceUrl = nextProps.resourceUrl;
-      this.resetValue(nextProps.value);
+      // 编辑器 focus 操作，会导致 react 报错:
+      // 'unstable_flushDiscreteUpdates: Cannot flush updates when React is already rendering.'
+      // 使用 setTimeout 可以规避此问题
+      window.clearTimeout(this.resetValueTimer);
+      this.resetValueTimer = setTimeout(() => {
+        this.resetValue(nextProps.contentId, nextProps.value);
+      }, 0);
     }
     if (nextState.isInitedEditor && !this.state.isInitedEditor) {
       updated = true;
@@ -204,6 +287,26 @@ class VditorEditor extends React.Component {
 
   componentWillUnmount() {
     this.unbind();
+  }
+
+  setEditorEnable() {
+    if (!this.isEditorReady()) {
+      return;
+    }
+    this.editor.enable();
+    const pre = this.editor.vditor.element.querySelector('.vditor-ir pre.vditor-reset');
+    pre.style.opacity = null;
+    pre.style.pointerEvents = null;
+  }
+
+  setEditorDisabled() {
+    if (!this.isEditorReady()) {
+      return;
+    }
+    this.editor.disabled();
+    const pre = this.editor.vditor.element.querySelector('.vditor-ir pre.vditor-reset');
+    pre.style.opacity = 1;
+    pre.style.pointerEvents = 'none';
   }
 
   setTags(tagList) {
@@ -228,15 +331,20 @@ class VditorEditor extends React.Component {
       cdn,
       after: () => {
         const { onInit, disabled } = this.props;
+        this.pageScrollAni = new PageScrollAni(this.editor.vditor.element);
         if (onInit) {
           onInit(this.editor);
-          if (this.waitSetValue) {
-            this.resetValue(this.waitSetValue);
-            this.waitSetValue = null;
+          if (this.waitNoteData) {
+            this.resetValue(this.waitNoteData.contentId, this.waitNoteData.value);
+            this.waitNoteData = null;
           }
         }
         if (disabled) {
-          this.editor.disabled();
+          this.setEditorDisabled();
+        }
+        this.updateContentsList();
+        if (this.editor?.vditor?.element) {
+          this.editor.vditor.element.addEventListener('mousedown', this.handler.handleMouseDown);
         }
         // this._removePanelNode();
       },
@@ -244,11 +352,14 @@ class VditorEditor extends React.Component {
         const { onInput } = this.props;
         // this.setWordsNumber();
         if (onInput) onInput(text, html ?? this.editor.getHTML());
+        this.updateContentsList();
       },
       preview: {
+        theme: {
+          path: `${cdn}/dist/css/content-theme`,
+        },
         transform: (html) => {
           // console.log('------------ transform before -----------' + this.resourceUrl);
-          // console.log(html);
 
           const imgReg = /(<img\s+([^>]*\s+)?(data-src|src)=")index_files(\/[^"]*")/ig;
           let newHtml = html.replace(imgReg, (str, m1, m2, m3, m4) => m1 + this.resourceUrl + m4);
@@ -321,7 +432,6 @@ class VditorEditor extends React.Component {
             'export',
             'outline',
             'preview',
-            'format',
             'devtools',
             'info',
             'help',
@@ -400,6 +510,59 @@ class VditorEditor extends React.Component {
     return html;
   }
 
+  fixLink(e) {
+    const LinkElement = filterParentElement(e.target, this.editor.vditor.element, (dom) => dom.getAttribute('data-type') === 'a', true);
+    if (LinkElement) {
+      const afterStyle = window.getComputedStyle(LinkElement, ':after');
+      if (isCtrl(e) || (e.target === LinkElement && e.offsetX >= parseInt(afterStyle.getPropertyValue('left'), 10) && e.offsetY >= parseInt(afterStyle.getPropertyValue('top'), 10))) {
+        const urlElement = LinkElement.querySelector('.vditor-ir__marker--link');
+        if (urlElement.innerText) {
+          try {
+            window.open(urlElement.innerText);
+          } catch (err) {
+            console.error(err);
+          }
+          e.preventDefault();
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  fixImage(e) {
+    if (e.target.tagName.toLowerCase() === 'img') {
+      const containerElement = filterParentElement(e.target, this.editor.vditor.element, (dom) => hasClass(dom, 'vditor-ir__node'));
+      if (containerElement) {
+        const urlElement = containerElement.querySelector('.vditor-ir__marker--link');
+        // 修复没有data type
+        if (!containerElement.getAttribute('data-type')) {
+          containerElement.setAttribute('data-type', 'img');
+        }
+
+        if (urlElement) {
+          const range = document.createRange();
+          range.selectNodeContents(urlElement);
+          resetRange(range);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  fixChangeImage(e) {
+    if (e.target.parentElement && e.target.parentElement.getAttribute('data-type') === 'img' && e.target === e.target.parentElement.children[0]) {
+      e.preventDefault();
+      const range = document.createRange();
+      const imgContainer = e.target.parentElement;
+      range.setStartAfter(imgContainer);
+      resetRange(range);
+
+      this.props.onInsertImage(() => imgContainer.remove());
+    }
+  }
+
   // 触发Vditor隐藏菜单点击事件
   emitVditorTooltipEvent(type) {
     if (this.editor?.vditor.element) {
@@ -433,15 +596,17 @@ class VditorEditor extends React.Component {
     }
   }
 
-  resetValue(value) {
+  resetValue(contentId, value) {
     if (!this.isEditorReady()) {
-      this.waitSetValue = value;
+      this.waitNoteData = { contentId, value };
       return;
     }
+    this.editor.contentId = contentId;
     this.editor.setValue(value, true);
+    this.updateContentsList();
     setTimeout(() => {
       // this.setWordsNumber();
-      this.focusEnd();
+      this.focusStart();
     }, 100);
   }
 
@@ -462,20 +627,34 @@ class VditorEditor extends React.Component {
       && range.startOffset === 0;
   }
 
-  focusEnd() {
+  focusStart() {
     if (this.editor?.vditor.element) {
       const dom = this.editor.vditor.element.querySelector('.vditor-ir .vditor-reset');
       dom.focus();
       const selection = getSelection();
-      if (dom.childElementCount > 0 && dom.children[0].tagName.toLowerCase() === 'h1' && this.props.autoSelectTitle) {
+      const first = dom.firstChild;
+      if (!first) {
+        setRange(dom, 0);
+        return;
+      }
+
+      if (/^h1$/i.test(first.tagName) && this.props.autoSelectTitle) {
         const range = window.document.createRange();
-        range.selectNodeContents(dom.children[0].lastChild);
+        range.selectNodeContents(first.lastChild);
         selection.removeAllRanges();
         selection.addRange(range);
-      } else {
-        selection.selectAllChildren(dom);
-        selection.collapseToEnd();
+        this.editor.vditor.ir.expandMarker(getRange(), this.editor.vditor);
+        return;
       }
+
+      const isHeading = /^h[1-6]$/i.test(first.tagName);
+      const headingFirst = first.firstChild;
+      if (isHeading && headingFirst && /^span$/i.test(headingFirst.tagName)) {
+        setRange(headingFirst.nextSibling, 0);
+        this.editor.vditor.ir.expandMarker(getRange(), this.editor.vditor);
+        return;
+      }
+      setRange(headingFirst, 0);
     }
   }
 
@@ -483,9 +662,18 @@ class VditorEditor extends React.Component {
     // Down (Chrome Patch: 文字 后面跟着 img，img 被自动换行，这时候从该行前面的问题使用 下方向键，无法将光标移动到后面的段落)
     const sel = getSelection();
     let range = getRange();
+    if (event.nativeEvent.defaultPrevented || !range || !range.collapsed) {
+      // defaultPrevented = true 说明 Vditor 编辑器已经处理了键盘操作
+      return;
+    }
+    const isInCode = !!getCodeFromRange(this.editor.vditor.element);
+    const isInTable = !isInCode && !!getTableFromRange(this.editor.vditor.element);
+    if (isInCode || isInTable) {
+      return;
+    }
     try {
       sel.modify('move', 'forward', 'line');
-      const rangeNew = getRange;
+      const rangeNew = getRange();
       if (range.startContainer === rangeNew.startContainer
         && range.startOffset === rangeNew.startOffset) {
         let target = rangeNew.startContainer;
@@ -551,6 +739,19 @@ class VditorEditor extends React.Component {
           wordList={this.tags}
           onChangeShowState={this.handler.handleChangeTagMenuShowState}
         />
+        <TableMenu
+          editor={this.editor}
+          onSaveNote={this.props.onSave}
+        />
+        <ImageMenu
+          editor={this.editor}
+          onSaveNote={this.props.onSave}
+          onInsertImage={this.props.onInsertImage}
+        />
+        <TableToolbar
+          editor={this.editor}
+          onSaveNote={this.props.onSave}
+        />
       </div>
     );
   }
@@ -578,6 +779,7 @@ VditorEditor.propTypes = {
   tagList: PropTypes.object,
   autoSelectTitle: PropTypes.bool,
   hideBlockType: PropTypes.bool,
+  onUpdateContentsList: PropTypes.func,
 };
 
 VditorEditor.defaultProps = {
@@ -599,6 +801,7 @@ VditorEditor.defaultProps = {
   tagList: {},
   autoSelectTitle: false,
   hideBlockType: false,
+  onUpdateContentsList: null,
 };
 
 export default withStyles(styles)(VditorEditor);

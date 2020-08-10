@@ -62,6 +62,11 @@ export default function ThemeSwitcher(props) {
             },
           },
         },
+        MuiTypography: {
+          h1: {
+            fontWeight: 700,
+          },
+        },
       },
       custom: {
         background: {
@@ -92,7 +97,7 @@ export default function ThemeSwitcher(props) {
           noteTypeButton: prefersDarkMode ? '#d8d8d8' : '#333333',
           matchedText: '#aaaaaa',
           activeStarIcon: '#FDDD10',
-          defaultStarIcon: prefersDarkMode ? '#d8d8d8' : '#50575F',
+          defaultStarIcon: prefersDarkMode ? '#d8d8d8' : '#333333',
           sidebarIcon: prefersDarkMode ? '#d8d8d8' : '#333333',
           hr: prefersDarkMode ? '#404040' : '#d8d8d8',
           contentToolIcon: '#aaaaaa',

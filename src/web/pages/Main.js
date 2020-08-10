@@ -1,17 +1,22 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
-import { injectIntl } from 'react-intl';
+import { injectIntl, FormattedMessage } from 'react-intl';
 import { withStyles } from '@material-ui/core/styles';
+import Button from '@material-ui/core/Button';
+import IconButton from '@material-ui/core/IconButton';
 import trim from 'lodash/trim';
+import { withSnackbar } from 'notistack';
 //
 import NoteList from '../components/NoteList';
 import Content from '../components/Content';
 import CommonHeader from '../components/CommonHeader';
 import SideBar from '../components/SideBar';
 import LiteText from '../components/LiteText';
-import LoginDialog from '../components/LoginDialog';
+import LoginDialog from '../dialogs/LoginDialog';
+import UpgradeToVIPDialog from '../dialogs/UpgradeToVIPDialog';
 // import SettingDialog from '../components/SettingDialog';
+import Icons from '../config/icons';
 
 const noteListWidth = '25%';
 
@@ -86,7 +91,18 @@ const styles = (theme) => ({
   header: {
     marginBottom: theme.spacing(1),
   },
+  snackbarButton: {
+    color: 'white',
+    padding: 4,
+  },
+  snackbarButtonUpgrade: {
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    padding: 4,
+    marginRight: 8,
+  },
 });
+
+const SNACKBAR_KEY = 'WizErrorPayedPersonalExpired';
 
 class Main extends React.Component {
   handler = {
@@ -128,9 +144,6 @@ class Main extends React.Component {
     handleSelectNote: (currentNote) => {
       this.setState({ currentNote });
       window.wizApi.userManager.setUserSettings('lastNote', currentNote?.guid);
-    },
-    handleInvalidPassword: () => {
-
     },
     handleTagSelected: async (tag) => {
       this.setState({
@@ -186,8 +199,8 @@ class Main extends React.Component {
         tagName = tagText.substr(lastChildIndex + 1);
       }
       const tag = {
-        key: tagText,
-        title: tagName,
+        key: tagText.toLowerCase(),
+        title: tagName.toLowerCase(),
       };
       this.handler.handleTagSelected(tag);
     },
@@ -198,6 +211,121 @@ class Main extends React.Component {
       }, () => {
         window.wizApi.windowManager.toggleFullScreen();
       });
+    },
+
+    handleMenuItemClicked: (id) => {
+      if (id === 'menuViewEditorOnly') {
+        this.setState({ isFullScreen: true });
+      } else if (id === 'menuViewEditorAndNotes') {
+        this.setState({ isFullScreen: false, showDrawer: false });
+      } else if (id === 'menuViewEditorAndNotesAndTags') {
+        this.setState({ isFullScreen: false, showDrawer: true });
+      }
+    },
+
+    handleSyncFinish: (kbGuid, result, syncOptions) => {
+      if (kbGuid !== this.props.kbGuid) {
+        return;
+      }
+      const { intl, enqueueSnackbar, classes } = this.props;
+      if (result.error) {
+        const err = result.error;
+        if (err.code === 'WizErrorInvalidPassword') {
+          alert(this.props.intl.formatMessage({ id: 'errorInvalidPassword' }));
+          this.props.onInvalidPassword();
+          return;
+        } else if (err.externCode === 'WizErrorPayedPersonalExpired') {
+          this.showUpgradeVipMessage(true, syncOptions);
+          return;
+        } else if (err.externCode === 'WizErrorFreePersonalExpired') {
+          this.showUpgradeVipMessage(false, syncOptions);
+          return;
+        }
+        //
+        console.error(err);
+        //
+        const message = intl.formatMessage({ id: 'errorSyncFailed' }, { message: err.message });
+        enqueueSnackbar(message, {
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'center',
+          },
+          variant: 'error',
+          key: 'WizErrorSync',
+          action: (() => (
+            <>
+              <Button
+                onClick={this.handler.handleViewLog}
+                className={classNames(classes.snackbarButton, classes.snackbarButtonUpgrade)}
+              >
+                <FormattedMessage id="buttonViewLog" />
+              </Button>
+              <IconButton
+                onClick={() => this.handler.handleCloseSnackbar('WizErrorSync')}
+                className={classes.snackbarButton}
+              >
+                <Icons.CloseIcon />
+              </IconButton>
+            </>
+          )),
+        });
+      } else if (result.failedNotes && result.failedNotes.length > 0) {
+        //
+        let notes = result.failedNotes;
+        if (notes.length > 3) {
+          notes = notes.slice(0, 3);
+        }
+        const titles = notes.join(', ');
+        const message = intl.formatMessage({ id: 'errorNoteSyncFailed' }, { message: titles });
+        enqueueSnackbar(message, {
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'center',
+          },
+          variant: 'error',
+          key: 'WizErrorSyncNotes',
+          action: (() => (
+            <>
+              <Button
+                onClick={this.handler.handleViewLog}
+                className={classNames(classes.snackbarButton, classes.snackbarButtonUpgrade)}
+              >
+                <FormattedMessage id="buttonViewLog" />
+              </Button>
+              <IconButton
+                onClick={() => this.handler.handleCloseSnackbar('WizErrorSyncNotes')}
+                className={classes.snackbarButton}
+              >
+                <Icons.CloseIcon />
+              </IconButton>
+            </>
+          )),
+        });
+        //
+      }
+    },
+
+    handleUpgradeVip: () => {
+      const isLocalUser = window.wizApi.userManager.currentUser.isLocalUser;
+      if (isLocalUser) {
+        this.handler.handleShowLoginDialog();
+        return;
+      }
+      //
+      this.props.closeSnackbar(SNACKBAR_KEY);
+      this.setState({ showUpgradeToVipDialog: true });
+    },
+
+    handleCloseSnackbar: (key) => {
+      this.props.closeSnackbar(key);
+    },
+
+    handleCloseUpgradeToVipDialog: () => {
+      this.setState({ showUpgradeToVipDialog: false });
+    },
+
+    handleViewLog: () => {
+      window.wizApi.userManager.viewLogFile();
     },
   }
 
@@ -212,10 +340,12 @@ class Main extends React.Component {
       matchedNotesCount: 0,
       showMatched: false,
       showLoginDialog: false,
+      showUpgradeToVipDialog: false,
       // showSettingDialog: false,
       backgroundType: window.wizApi.userManager.getUserSettingsSync('background', 'white'),
       isFullScreen: window.wizApi.windowManager.isFullScreen(),
     };
+    this._upgradeVipDisplayed = false;
   }
 
   async componentDidMount() {
@@ -234,9 +364,55 @@ class Main extends React.Component {
         //
       }
     }
+    window.wizApi.userManager.on('syncFinish', this.handler.handleSyncFinish);
+    window.wizApi.userManager.on('menuItemClicked', this.handler.handleMenuItemClicked);
   }
 
   componentWillUnmount() {
+    window.wizApi.userManager.off('syncFinish', this.handler.handleSyncFinish);
+    window.wizApi.userManager.off('menuItemClicked', this.handler.handleMenuItemClicked);
+  }
+
+  showUpgradeVipMessage(isVipExpired, syncOptions) {
+    const shouldShow = !this._upgradeVipDisplayed || syncOptions.manual;
+    if (!shouldShow) {
+      return;
+    }
+    this._upgradeVipDisplayed = true;
+    //
+    const { classes, intl, enqueueSnackbar } = this.props;
+
+    const messageId = isVipExpired ? 'errorVipExpiredSync' : 'errorUpgradeVipSync';
+    const message = intl.formatMessage({ id: messageId });
+    //
+    const buttonMessageId = isVipExpired ? 'buttonRenewVip' : 'buttonUpgradeVip';
+    const buttonMessage = intl.formatMessage({ id: buttonMessageId });
+    //
+    enqueueSnackbar(message, {
+      anchorOrigin: {
+        vertical: 'top',
+        horizontal: 'center',
+      },
+      variant: 'error',
+      persist: true,
+      key: SNACKBAR_KEY,
+      action: (() => (
+        <>
+          <Button
+            onClick={this.handler.handleUpgradeVip}
+            className={classNames(classes.snackbarButton, classes.snackbarButtonUpgrade)}
+          >
+            {buttonMessage}
+          </Button>
+          <IconButton
+            onClick={() => this.handler.handleCloseSnackbar(SNACKBAR_KEY)}
+            className={classes.snackbarButton}
+          >
+            <Icons.CloseIcon />
+          </IconButton>
+        </>
+      )),
+    });
   }
 
   //
@@ -250,7 +426,9 @@ class Main extends React.Component {
       currentNote,
       showDrawer,
       tag, matchedNotesCount, showMatched,
-      backgroundType, showLoginDialog,
+      backgroundType,
+      showLoginDialog,
+      showUpgradeToVipDialog,
       isFullScreen,
       // showSettingDialog,
     } = this.state;
@@ -266,6 +444,7 @@ class Main extends React.Component {
           onClickLogin={this.handler.handleShowLoginDialog}
           onClickSetting={this.handler.handleShowSettingDialog}
           selectedTag={tag}
+          onUpgradeVip={this.handler.handleUpgradeVip}
         />
         <div className={classNames(
           classes.noteListContainer,
@@ -273,7 +452,12 @@ class Main extends React.Component {
           isFullScreen && classes.noteListContainer_fullScreen,
         )}
         >
-          <CommonHeader showLogo={!showDrawer} className={classes.header} />
+          <CommonHeader
+            showLogo={!showDrawer}
+            showUserType={!showDrawer}
+            className={classes.header}
+            onUpgradeVip={this.handler.handleUpgradeVip}
+          />
           <NoteList
             className={classes.noteList}
             selectedNoteGuid={currentNote?.guid}
@@ -304,6 +488,7 @@ class Main extends React.Component {
               note={currentNote}
               kbGuid={kbGuid}
               isSearch={showMatched}
+              isShowDrawer={showDrawer}
               backgroundType={backgroundType}
               onCreateAccount={this.handler.handleShowLoginDialog}
               onClickTag={this.handler.handleClickTag}
@@ -317,6 +502,11 @@ class Main extends React.Component {
           mergeLocalAccount={mergeLocalAccount}
           onClose={this.handler.handleLoginDialogClose}
           onLoggedIn={this.props.onLoggedIn}
+        />
+
+        <UpgradeToVIPDialog
+          open={showUpgradeToVipDialog}
+          onClose={this.handler.handleCloseUpgradeToVipDialog}
         />
 
         {/* <SettingDialog
@@ -335,15 +525,16 @@ Main.propTypes = {
   user: PropTypes.object.isRequired,
   kbGuid: PropTypes.string,
   onCreateAccount: PropTypes.func,
-  onInvalidPassword: PropTypes.func,
+  onInvalidPassword: PropTypes.func.isRequired,
   mergeLocalAccount: PropTypes.bool.isRequired,
   onLoggedIn: PropTypes.func.isRequired,
+  enqueueSnackbar: PropTypes.func.isRequired,
+  closeSnackbar: PropTypes.func.isRequired,
 };
 
 Main.defaultProps = {
   kbGuid: null,
   onCreateAccount: null,
-  onInvalidPassword: null,
 };
 
-export default withStyles(styles)(injectIntl(Main));
+export default withSnackbar(withStyles(styles)(injectIntl(Main)));
